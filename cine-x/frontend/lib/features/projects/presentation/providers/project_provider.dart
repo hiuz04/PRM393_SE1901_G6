@@ -28,7 +28,7 @@ class ProjectProvider extends ChangeNotifier {
     } on AppException catch (ex) {
       error = ex.message;
     } catch (_) {
-      error = 'Unable to load projects';
+      error = 'Không thể tải dự án.';
     } finally {
       loading = false;
       notifyListeners();

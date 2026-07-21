@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class LoadingView extends StatefulWidget {
-  const LoadingView({super.key, this.message = 'Loading studio workspace'});
+  const LoadingView({super.key, this.message = 'Đang tải không gian làm việc'});
 
   final String message;
 
@@ -70,7 +70,7 @@ class EmptyView extends StatelessWidget {
   const EmptyView({
     super.key,
     required this.title,
-    this.message = 'Build the first piece of your production plan.',
+    this.message = 'Hãy bắt đầu tạo phần đầu tiên cho kế hoạch sản xuất.',
     this.action,
     this.icon = Icons.auto_awesome_rounded,
   });
@@ -103,14 +103,14 @@ class ErrorStateView extends StatelessWidget {
     return _StateShell(
       icon: Icons.error_outline_rounded,
       iconColor: Theme.of(context).colorScheme.error,
-      title: 'Something needs attention',
+      title: 'Có mục cần kiểm tra',
       message: message,
       action: onRetry == null
           ? null
           : FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
+              label: const Text('Thử lại'),
             ),
     );
   }

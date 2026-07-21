@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/widgets/state_views.dart';
+import '../../../../providers/auth_provider.dart';
 import '../../../projects/presentation/screens/project_launcher_screen.dart';
-import '../providers/auth_provider.dart';
 import 'auth_screen.dart';
 
 class SessionGate extends StatefulWidget {
@@ -32,7 +32,7 @@ class _SessionGateState extends State<SessionGate> {
     final auth = context.watch<AuthProvider>();
     if (auth.initializing) {
       return const Scaffold(
-        body: LoadingView(message: 'Preparing your studio'),
+        body: LoadingView(message: 'Đang chuẩn bị studio của bạn'),
       );
     }
     return auth.authenticated

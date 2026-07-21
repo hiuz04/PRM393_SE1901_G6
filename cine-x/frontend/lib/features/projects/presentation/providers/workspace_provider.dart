@@ -37,7 +37,7 @@ class WorkspaceProvider extends ChangeNotifier {
         loadAnalytics(),
       ]);
     } catch (_) {
-      error ??= 'Unable to load workspace';
+      error ??= 'Không thể tải không gian dự án';
     } finally {
       loading = false;
       notifyListeners();
@@ -188,7 +188,7 @@ class WorkspaceProvider extends ChangeNotifier {
       error = ex.message;
       return false;
     } catch (_) {
-      error = 'Action failed';
+      error = 'Thao tác thất bại.';
       return false;
     } finally {
       loading = false;

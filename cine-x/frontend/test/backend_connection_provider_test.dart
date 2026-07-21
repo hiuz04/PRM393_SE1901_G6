@@ -1,53 +1,29 @@
-import 'package:cine_x/core/network/api_client.dart';
 import 'package:cine_x/core/network/backend_connection_provider.dart';
-import 'package:cine_x/core/storage/token_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-class FakeApiClient extends ApiClient {
-  FakeApiClient({this.response, this.failure})
-      : super('http://localhost', MemoryTokenStorage());
-
-  final Object? response;
-  final Object? failure;
-  String? requestedPath;
-  Duration? requestedTimeout;
-
-  @override
-  Future<dynamic> get(
-    String path, {
-    Map<String, Object?> query = const {},
-    Duration timeout = const Duration(seconds: 20),
-  }) async {
-    requestedPath = path;
-    requestedTimeout = timeout;
-    if (failure != null) {
-      throw failure!;
-    }
-    return response;
-  }
-}
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
-  test('BackendConnectionProvider marks online from health endpoint', () async {
-    final client = FakeApiClient(response: <String, dynamic>{'status': 'UP'});
-    final provider = BackendConnectionProvider.empty()..attach(client);
+  setUpAll(sqfliteFfiInit);
+
+  test('BackendConnectionProvider marks online from SQLite', () async {
+    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    final provider = BackendConnectionProvider.local(db);
 
     await provider.check();
 
-    expect(client.requestedPath, '/health');
-    expect(client.requestedTimeout, const Duration(seconds: 3));
     expect(provider.status, BackendConnectionStatus.online);
     expect(provider.error, isNull);
+    await db.close();
   });
 
-  test('BackendConnectionProvider marks offline on connection failure',
-      () async {
-    final provider = BackendConnectionProvider.empty()
-      ..attach(FakeApiClient(failure: Exception('offline')));
+  test('BackendConnectionProvider marks offline on database failure', () async {
+    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    await db.close();
+    final provider = BackendConnectionProvider.local(db);
 
     await provider.check();
 
     expect(provider.status, BackendConnectionStatus.offline);
-    expect(provider.error, 'Unable to connect to the server');
+    expect(provider.error, 'Không thể mở cơ sở dữ liệu SQLite cục bộ');
   });
 }

@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart';
-
-import 'api_client.dart';
+import 'package:sqflite/sqflite.dart';
 
 enum BackendConnectionStatus { idle, checking, online, offline }
 
 class BackendConnectionProvider extends ChangeNotifier {
   BackendConnectionProvider.empty();
+  BackendConnectionProvider.local(this._database);
 
-  ApiClient? _client;
+  Database? _database;
   BackendConnectionStatus status = BackendConnectionStatus.idle;
   String? error;
   DateTime? checkedAt;
@@ -15,13 +15,13 @@ class BackendConnectionProvider extends ChangeNotifier {
   bool get checking => status == BackendConnectionStatus.checking;
   bool get online => status == BackendConnectionStatus.online;
 
-  void attach(ApiClient client) {
-    _client = client;
+  void attach(Database database) {
+    _database = database;
   }
 
   Future<void> check() async {
-    final client = _client;
-    if (client == null) {
+    final database = _database;
+    if (database == null) {
       return;
     }
 
@@ -30,19 +30,11 @@ class BackendConnectionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final data = await client.get(
-        '/health',
-        timeout: const Duration(seconds: 3),
-      );
-      if (data is Map<String, dynamic> && data['status'] == 'UP') {
-        status = BackendConnectionStatus.online;
-      } else {
-        status = BackendConnectionStatus.offline;
-        error = 'Server health check returned an unexpected response';
-      }
+      await database.rawQuery('SELECT 1');
+      status = BackendConnectionStatus.online;
     } catch (_) {
       status = BackendConnectionStatus.offline;
-      error = 'Unable to connect to the server';
+      error = 'Không thể mở cơ sở dữ liệu SQLite cục bộ';
     } finally {
       checkedAt = DateTime.now();
       notifyListeners();

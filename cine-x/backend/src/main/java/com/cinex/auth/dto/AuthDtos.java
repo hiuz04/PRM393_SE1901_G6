@@ -1,6 +1,6 @@
 package com.cinex.auth.dto;
 
-import com.cinex.user.SystemRole;
+import com.cinex.user.domain.SystemRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

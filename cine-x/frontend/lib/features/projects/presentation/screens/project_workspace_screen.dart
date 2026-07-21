@@ -33,27 +33,27 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen> {
     NavigationDestination(
       icon: Icon(Icons.space_dashboard_outlined),
       selectedIcon: Icon(Icons.space_dashboard_rounded),
-      label: 'Overview',
+      label: 'Tổng quan',
     ),
     NavigationDestination(
       icon: Icon(Icons.view_kanban_outlined),
       selectedIcon: Icon(Icons.view_kanban_rounded),
-      label: 'Storyboard',
+      label: 'Kịch bản',
     ),
     NavigationDestination(
       icon: Icon(Icons.groups_outlined),
       selectedIcon: Icon(Icons.groups_rounded),
-      label: 'Characters',
+      label: 'Nhân vật',
     ),
     NavigationDestination(
       icon: Icon(Icons.location_on_outlined),
       selectedIcon: Icon(Icons.location_on_rounded),
-      label: 'Locations',
+      label: 'Bối cảnh',
     ),
     NavigationDestination(
       icon: Icon(Icons.insights_outlined),
       selectedIcon: Icon(Icons.insights_rounded),
-      label: 'Analytics',
+      label: 'Phân tích',
     ),
   ];
 
@@ -76,7 +76,7 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen> {
 
     Widget content;
     if (provider.loading && provider.dashboard == null) {
-      content = const LoadingView(message: 'Preparing project workspace');
+      content = const LoadingView(message: 'Đang chuẩn bị không gian dự án');
     } else if (provider.error != null && provider.dashboard == null) {
       content = ErrorStateView(
         message: provider.error!,
@@ -367,7 +367,7 @@ class _HeroCover extends StatelessWidget {
                 bottom: 14,
                 child: _SoftChip(
                   label: project.genre?.trim().isEmpty ?? true
-                      ? 'Creative workspace'
+                      ? 'Không gian sáng tạo'
                       : project.genre!,
                   color: CineXPalette.accent,
                 ),
@@ -460,7 +460,7 @@ class _HeroDetails extends StatelessWidget {
                   const SizedBox(height: 7),
                   Text(
                     project.description?.trim().isEmpty ?? true
-                        ? 'Plan acts, scenes, locations, cast, and production rhythm.'
+                        ? 'Lên kế hoạch hồi, cảnh, bối cảnh, nhân vật và nhịp sản xuất.'
                         : project.description!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -485,22 +485,22 @@ class _HeroDetails extends StatelessWidget {
           children: [
             _HeroMetric(
               icon: Icons.view_kanban_rounded,
-              label: 'Scenes',
+              label: 'Cảnh',
               value: '${dashboard?.totalScenes ?? 0}',
             ),
             _HeroMetric(
               icon: Icons.groups_rounded,
-              label: 'Characters',
+              label: 'Nhân vật',
               value: '${dashboard?.totalCharacters ?? 0}',
             ),
             _HeroMetric(
               icon: Icons.location_on_rounded,
-              label: 'Locations',
+              label: 'Bối cảnh',
               value: '${dashboard?.totalLocations ?? 0}',
             ),
             _HeroMetric(
               icon: Icons.check_circle_rounded,
-              label: 'Done',
+              label: 'Hoàn tất',
               value: '${dashboard?.doneScenes ?? 0}',
             ),
           ],
@@ -511,23 +511,23 @@ class _HeroDetails extends StatelessWidget {
           runSpacing: 10,
           children: [
             IconButton.filledTonal(
-              tooltip: 'Refresh',
+              tooltip: 'Làm mới',
               onPressed: context.read<WorkspaceProvider>().loadAll,
               icon: const Icon(Icons.refresh_rounded),
             ),
             IconButton.filledTonal(
-              tooltip: 'Edit project',
-              onPressed: () => _showFeatureMessage(context, 'Project editing'),
+              tooltip: 'Chỉnh sửa dự án',
+              onPressed: () => _showFeatureMessage(context, 'Chỉnh sửa dự án'),
               icon: const Icon(Icons.edit_rounded),
             ),
             IconButton.filledTonal(
-              tooltip: 'Export PDF',
+              tooltip: 'Xuất PDF',
               onPressed: () => _exportPdf(context),
               icon: const Icon(Icons.picture_as_pdf_rounded),
             ),
             IconButton.filledTonal(
-              tooltip: 'Share',
-              onPressed: () => _showFeatureMessage(context, 'Project sharing'),
+              tooltip: 'Chia sẻ',
+              onPressed: () => _showFeatureMessage(context, 'Chia sẻ dự án'),
               icon: const Icon(Icons.ios_share_rounded),
             ),
           ],
@@ -598,7 +598,7 @@ class _WorkspaceFab extends StatelessWidget {
           provider.acts.isEmpty
               ? Icons.playlist_add_rounded
               : Icons.add_rounded,
-          provider.acts.isEmpty ? 'New act' : 'New scene',
+          provider.acts.isEmpty ? 'Hồi mới' : 'Cảnh mới',
           () {
             if (provider.acts.isEmpty) {
               _showActSheet(context);
@@ -611,22 +611,22 @@ class _WorkspaceFab extends StatelessWidget {
         ),
       2 => (
           Icons.person_add_alt_rounded,
-          'New character',
+          'Nhân vật mới',
           () => _showCharacterSheet(context),
         ),
       3 => (
           Icons.add_location_alt_rounded,
-          'New location',
+          'Bối cảnh mới',
           () => _showLocationSheet(context),
         ),
       4 => (
           Icons.picture_as_pdf_rounded,
-          'Export',
+          'Xuất',
           () => _exportPdf(context),
         ),
       _ => (
           Icons.add_rounded,
-          'New scene',
+          'Cảnh mới',
           () {
             if (provider.acts.isEmpty) {
               _showActSheet(context);
@@ -678,25 +678,25 @@ class _MetricGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final cards = [
       _MetricTile(
-        label: 'Acts',
+        label: 'Hồi',
         value: '${dashboard.totalActs}',
         icon: Icons.format_list_numbered_rounded,
         color: CineXPalette.primary,
       ),
       _MetricTile(
-        label: 'Scenes',
+        label: 'Cảnh',
         value: '${dashboard.totalScenes}',
         icon: Icons.view_kanban_rounded,
         color: CineXPalette.accent,
       ),
       _MetricTile(
-        label: 'Characters',
+        label: 'Nhân vật',
         value: '${dashboard.totalCharacters}',
         icon: Icons.groups_rounded,
         color: CineXPalette.secondary,
       ),
       _MetricTile(
-        label: 'Locations',
+        label: 'Bối cảnh',
         value: '${dashboard.totalLocations}',
         icon: Icons.location_on_rounded,
         color: CineXPalette.success,
@@ -804,26 +804,26 @@ class _ProgressPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Production progress',
+                'Tiến độ sản xuất',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: CineXPalette.textPrimary,
                     ),
               ),
               const SizedBox(height: 14),
               _ProgressBarRow(
-                label: 'To do',
+                label: 'Cần làm',
                 value: dashboard.todoScenes,
                 total: total,
                 color: CineXPalette.textSecondary,
               ),
               _ProgressBarRow(
-                label: 'In progress',
+                label: 'Đang thực hiện',
                 value: dashboard.inProgressScenes,
                 total: total,
                 color: CineXPalette.warning,
               ),
               _ProgressBarRow(
-                label: 'Done',
+                label: 'Hoàn tất',
                 value: dashboard.doneScenes,
                 total: total,
                 color: CineXPalette.success,
@@ -865,7 +865,7 @@ class _OverviewFocus extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Next creative moves',
+            'Việc sáng tạo tiếp theo',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: CineXPalette.textPrimary,
                 ),
@@ -873,7 +873,7 @@ class _OverviewFocus extends StatelessWidget {
           const SizedBox(height: 14),
           if (nextScenes.isEmpty)
             Text(
-              'No open scenes yet. Add your first act or scene to start shaping the board.',
+              'Chưa có cảnh đang mở. Hãy thêm hồi hoặc cảnh đầu tiên để bắt đầu sắp xếp bảng.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: CineXPalette.textSecondary,
                   ),
@@ -933,7 +933,7 @@ class _FocusSceneRow extends StatelessWidget {
                 children: [
                   Text(
                     scene.title?.trim().isEmpty ?? true
-                        ? 'Untitled scene'
+                        ? 'Cảnh chưa đặt tên'
                         : scene.title!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -973,33 +973,33 @@ class _StoryboardPage extends StatelessWidget {
     return Column(
       children: [
         _SectionToolbar(
-          title: 'Storyboard',
-          subtitle: 'Kanban-style act and scene planning.',
+          title: 'Kịch bản',
+          subtitle: 'Sắp xếp hồi và cảnh theo dạng bảng Kanban.',
           actions: [
             FilledButton.icon(
               onPressed: () => _showActSheet(context),
               icon: const Icon(Icons.playlist_add_rounded),
-              label: const Text('Act'),
+              label: const Text('Hồi'),
             ),
             FilledButton.icon(
               onPressed: acts.isEmpty || provider.locations.isEmpty
                   ? null
                   : () => _showSceneSheet(context),
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Scene'),
+              label: const Text('Cảnh'),
             ),
           ],
         ),
         Expanded(
           child: acts.isEmpty
               ? EmptyView(
-                  title: 'No acts yet',
-                  message: 'Create the first act to begin arranging scenes.',
+                  title: 'Chưa có hồi',
+                  message: 'Tạo hồi đầu tiên để bắt đầu sắp xếp cảnh.',
                   icon: Icons.view_kanban_rounded,
                   action: FilledButton.icon(
                     onPressed: () => _showActSheet(context),
                     icon: const Icon(Icons.playlist_add_rounded),
-                    label: const Text('Create act'),
+                    label: const Text('Tạo hồi'),
                   ),
                 )
               : LayoutBuilder(
@@ -1168,7 +1168,7 @@ class _ActColumn extends StatelessWidget {
                         ),
                   ),
                   Text(
-                    '${scenes.length} scenes',
+                    '${scenes.length} cảnh',
                     style: const TextStyle(
                       color: CineXPalette.textSecondary,
                       fontWeight: FontWeight.w700,
@@ -1250,7 +1250,7 @@ class _ActEmptyState extends StatelessWidget {
               Icon(Icons.add_rounded, color: CineXPalette.primary),
               SizedBox(height: 8),
               Text(
-                'Add scene',
+                'Thêm cảnh',
                 style: TextStyle(
                   color: CineXPalette.textPrimary,
                   fontWeight: FontWeight.w900,
@@ -1304,7 +1304,7 @@ class _SceneCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Scene ${scene.sceneNumber}',
+                        'Cảnh ${scene.sceneNumber}',
                         style: TextStyle(
                           color: statusColor,
                           fontSize: 12,
@@ -1313,7 +1313,7 @@ class _SceneCard extends StatelessWidget {
                       ),
                       Text(
                         scene.title?.trim().isEmpty ?? true
-                            ? 'Untitled scene'
+                            ? 'Cảnh chưa đặt tên'
                             : scene.title!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -1327,9 +1327,9 @@ class _SceneCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filledTonal(
-                  tooltip: 'Edit scene',
+                  tooltip: 'Chỉnh sửa cảnh',
                   onPressed: () =>
-                      _showFeatureMessage(context, 'Scene editing'),
+                      _showFeatureMessage(context, 'Chỉnh sửa cảnh'),
                   icon: const Icon(Icons.edit_rounded, size: 18),
                 ),
               ],
@@ -1341,7 +1341,7 @@ class _SceneCard extends StatelessWidget {
               children: [
                 _SoftChip(
                   label: scene.locationName.isEmpty
-                      ? 'Location unset'
+                      ? 'Chưa gán bối cảnh'
                       : scene.locationName,
                   color: CineXPalette.primary,
                 ),
@@ -1431,7 +1431,7 @@ class _SceneAvatars extends StatelessWidget {
   Widget build(BuildContext context) {
     if (characters.isEmpty) {
       return const Text(
-        'No cast attached',
+        'Chưa gắn nhân vật',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
@@ -1507,27 +1507,27 @@ class _CharactersPage extends StatelessWidget {
     return Column(
       children: [
         _SectionToolbar(
-          title: 'Characters',
-          subtitle: 'A visual cast board for writing and directing.',
+          title: 'Nhân vật',
+          subtitle: 'Bảng nhân vật trực quan cho biên kịch và đạo diễn.',
           actions: [
             FilledButton.icon(
               onPressed: () => _showCharacterSheet(context),
               icon: const Icon(Icons.person_add_alt_rounded),
-              label: const Text('Character'),
+              label: const Text('Nhân vật'),
             ),
           ],
         ),
         Expanded(
           child: provider.characters.isEmpty
               ? EmptyView(
-                  title: 'No characters yet',
+                  title: 'Chưa có nhân vật',
                   message:
-                      'Add the first character and build a visual cast wall.',
+                      'Thêm nhân vật đầu tiên để xây dựng bảng dàn diễn viên.',
                   icon: Icons.groups_rounded,
                   action: FilledButton.icon(
                     onPressed: () => _showCharacterSheet(context),
                     icon: const Icon(Icons.person_add_alt_rounded),
-                    label: const Text('Create character'),
+                    label: const Text('Tạo nhân vật'),
                   ),
                 )
               : LayoutBuilder(
@@ -1655,7 +1655,7 @@ class _CharacterCardState extends State<_CharacterCard> {
                   top: 12,
                   right: 12,
                   child: IconButton.filledTonal(
-                    tooltip: 'Upload portrait',
+                    tooltip: 'Tải chân dung',
                     onPressed: widget.onUpload,
                     icon: const Icon(Icons.image_rounded),
                   ),
@@ -1683,7 +1683,7 @@ class _CharacterCardState extends State<_CharacterCard> {
                       const SizedBox(height: 6),
                       Text(
                         character.description?.trim().isEmpty ?? true
-                            ? 'No character note yet.'
+                            ? 'Chưa có ghi chú nhân vật.'
                             : character.description!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -1694,7 +1694,7 @@ class _CharacterCardState extends State<_CharacterCard> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        '${widget.sceneCount} scenes',
+                        '${widget.sceneCount} cảnh',
                         style: const TextStyle(
                           color: CineXPalette.textPrimary,
                           fontWeight: FontWeight.w900,
@@ -1750,26 +1750,26 @@ class _LocationsPage extends StatelessWidget {
     return Column(
       children: [
         _SectionToolbar(
-          title: 'Locations',
-          subtitle: 'A travel-inspired map of cinematic spaces.',
+          title: 'Bối cảnh',
+          subtitle: 'Bản đồ không gian điện ảnh phục vụ lập kế hoạch quay.',
           actions: [
             FilledButton.icon(
               onPressed: () => _showLocationSheet(context),
               icon: const Icon(Icons.add_location_alt_rounded),
-              label: const Text('Location'),
+              label: const Text('Bối cảnh'),
             ),
           ],
         ),
         Expanded(
           child: provider.locations.isEmpty
               ? EmptyView(
-                  title: 'No locations yet',
-                  message: 'Add interiors and exteriors for scene planning.',
+                  title: 'Chưa có bối cảnh',
+                  message: 'Thêm nội cảnh và ngoại cảnh để lập kế hoạch cảnh.',
                   icon: Icons.location_on_rounded,
                   action: FilledButton.icon(
                     onPressed: () => _showLocationSheet(context),
                     icon: const Icon(Icons.add_location_alt_rounded),
-                    label: const Text('Create location'),
+                    label: const Text('Tạo bối cảnh'),
                   ),
                 )
               : LayoutBuilder(
@@ -1893,7 +1893,7 @@ class _LocationCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     location.notes?.trim().isEmpty ?? true
-                        ? 'No production note yet.'
+                        ? 'Chưa có ghi chú sản xuất.'
                         : location.notes!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -1912,7 +1912,7 @@ class _LocationCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '$sceneCount scenes',
+                        '$sceneCount cảnh',
                         style: const TextStyle(
                           color: CineXPalette.textPrimary,
                           fontWeight: FontWeight.w900,
@@ -1970,13 +1970,13 @@ class _AnalyticsPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 112),
       children: [
         _SectionToolbar(
-          title: 'Analytics',
-          subtitle: 'Premium production intelligence for scenes and cast.',
+          title: 'Phân tích',
+          subtitle: 'Thông tin sản xuất tổng hợp cho cảnh và dàn nhân vật.',
           actions: [
             FilledButton.icon(
               onPressed: () => _exportPdf(context),
               icon: const Icon(Icons.picture_as_pdf_rounded),
-              label: const Text('Export PDF'),
+              label: const Text('Xuất PDF'),
             ),
           ],
         ),
@@ -2028,7 +2028,7 @@ class _ScenePiePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Scene status',
+            'Trạng thái cảnh',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: CineXPalette.textPrimary,
                 ),
@@ -2039,7 +2039,7 @@ class _ScenePiePanel extends StatelessWidget {
             child: total == 0
                 ? const Center(
                     child: Text(
-                      'No chart data yet',
+                      'Chưa có dữ liệu biểu đồ',
                       style: TextStyle(color: CineXPalette.textSecondary),
                     ),
                   )
@@ -2101,26 +2101,26 @@ class _SceneBarPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Scene workload',
+            'Khối lượng cảnh',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: CineXPalette.textPrimary,
                 ),
           ),
           const SizedBox(height: 24),
           _ProgressBarRow(
-            label: 'To do',
+            label: 'Cần làm',
             value: analytics.todoScenes,
             total: total,
             color: CineXPalette.textSecondary,
           ),
           _ProgressBarRow(
-            label: 'In progress',
+            label: 'Đang thực hiện',
             value: analytics.inProgressScenes,
             total: total,
             color: CineXPalette.warning,
           ),
           _ProgressBarRow(
-            label: 'Done',
+            label: 'Hoàn tất',
             value: analytics.doneScenes,
             total: total,
             color: CineXPalette.success,
@@ -2149,7 +2149,7 @@ class _PlannerTimeline extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Timeline by location',
+            'Dòng thời gian theo bối cảnh',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: CineXPalette.textPrimary,
                 ),
@@ -2157,7 +2157,7 @@ class _PlannerTimeline extends StatelessWidget {
           const SizedBox(height: 14),
           if (provider.planner.isEmpty)
             const Text(
-              'No planner data yet.',
+              'Chưa có dữ liệu kế hoạch.',
               style: TextStyle(
                 color: CineXPalette.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -2183,13 +2183,13 @@ class _PlannerTimeline extends StatelessWidget {
                     leading: const Icon(Icons.place_rounded),
                     title: Text(group.location.name),
                     subtitle: Text(
-                      '${group.sceneCount} scenes / ${group.totalEstimatedMinutes} min',
+                      '${group.sceneCount} cảnh / ${group.totalEstimatedMinutes} phút',
                     ),
                     children: group.scenes
                         .map(
                           (scene) => ListTile(
                             title: Text(
-                              'Scene ${scene.sceneNumber}: ${scene.title?.trim().isEmpty ?? true ? 'Untitled' : scene.title!}',
+                              'Cảnh ${scene.sceneNumber}: ${scene.title?.trim().isEmpty ?? true ? 'Chưa đặt tên' : scene.title!}',
                             ),
                             subtitle: Text(sceneStatusLabel(scene.status)),
                           ),
@@ -2222,7 +2222,7 @@ class _CharacterFrequencyPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Character frequency',
+            'Tần suất nhân vật',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: CineXPalette.textPrimary,
                 ),
@@ -2230,7 +2230,7 @@ class _CharacterFrequencyPanel extends StatelessWidget {
           const SizedBox(height: 14),
           if (provider.characterFrequency.isEmpty)
             const Text(
-              'No character frequency data yet.',
+              'Chưa có dữ liệu tần suất nhân vật.',
               style: TextStyle(
                 color: CineXPalette.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -2627,8 +2627,8 @@ class _ActSheetState extends State<_ActSheet> {
   @override
   Widget build(BuildContext context) {
     return _SheetFrame(
-      title: 'Create act',
-      subtitle: 'Add a vertical section to the storyboard.',
+      title: 'Tạo hồi',
+      subtitle: 'Thêm một phần dọc vào bảng kịch bản.',
       child: Form(
         key: _formKey,
         child: Column(
@@ -2636,11 +2636,11 @@ class _ActSheetState extends State<_ActSheet> {
             TextFormField(
               controller: _title,
               decoration: const InputDecoration(
-                labelText: 'Act title',
+                labelText: 'Tên hồi',
                 prefixIcon: Icon(Icons.title_rounded),
               ),
               validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter an act title'
+                  ? 'Nhập tên hồi'
                   : null,
             ),
             const SizedBox(height: 14),
@@ -2648,7 +2648,7 @@ class _ActSheetState extends State<_ActSheet> {
               controller: _order,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Sequence order',
+                labelText: 'Thứ tự',
                 prefixIcon: Icon(Icons.format_list_numbered_rounded),
               ),
             ),
@@ -2657,7 +2657,7 @@ class _ActSheetState extends State<_ActSheet> {
               controller: _description,
               maxLines: 3,
               decoration: const InputDecoration(
-                labelText: 'Description',
+                labelText: 'Mô tả',
                 prefixIcon: Icon(Icons.notes_rounded),
               ),
             ),
@@ -2671,7 +2671,7 @@ class _ActSheetState extends State<_ActSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.playlist_add_rounded),
-              label: const Text('Create act'),
+              label: const Text('Tạo hồi'),
             ),
           ],
         ),
@@ -2737,13 +2737,13 @@ class _SceneSheetState extends State<_SceneSheet> {
     final provider = context.watch<WorkspaceProvider>();
     if (provider.acts.isEmpty || provider.locations.isEmpty) {
       return _SheetFrame(
-        title: 'Create scene',
-        subtitle: 'Scenes need at least one act and one location.',
+        title: 'Tạo cảnh',
+        subtitle: 'Cảnh cần ít nhất một hồi và một bối cảnh.',
         child: EmptyView(
-          title: 'Setup needed',
+          title: 'Cần thiết lập',
           message: provider.acts.isEmpty
-              ? 'Create an act before adding scenes.'
-              : 'Create a location before adding scenes.',
+              ? 'Tạo một hồi trước khi thêm cảnh.'
+              : 'Tạo một bối cảnh trước khi thêm cảnh.',
           icon: Icons.tune_rounded,
         ),
       );
@@ -2753,8 +2753,8 @@ class _SceneSheetState extends State<_SceneSheet> {
     _location ??= provider.locations.first;
 
     return _SheetFrame(
-      title: 'Create scene',
-      subtitle: 'Plan location, cast, status, and creative summary.',
+      title: 'Tạo cảnh',
+      subtitle: 'Lập kế hoạch bối cảnh, nhân vật, trạng thái và tóm tắt sáng tạo.',
       child: Form(
         key: _formKey,
         child: Column(
@@ -2763,7 +2763,7 @@ class _SceneSheetState extends State<_SceneSheet> {
               controller: _number,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Scene number',
+                labelText: 'Số cảnh',
                 prefixIcon: Icon(Icons.numbers_rounded),
               ),
             ),
@@ -2771,7 +2771,7 @@ class _SceneSheetState extends State<_SceneSheet> {
             TextFormField(
               controller: _title,
               decoration: const InputDecoration(
-                labelText: 'Scene title',
+                labelText: 'Tên cảnh',
                 prefixIcon: Icon(Icons.title_rounded),
               ),
             ),
@@ -2779,7 +2779,7 @@ class _SceneSheetState extends State<_SceneSheet> {
             DropdownButtonFormField<Act>(
               initialValue: _act,
               decoration: const InputDecoration(
-                labelText: 'Act',
+                labelText: 'Hồi',
                 prefixIcon: Icon(Icons.view_column_rounded),
               ),
               items: provider.acts
@@ -2792,7 +2792,7 @@ class _SceneSheetState extends State<_SceneSheet> {
             DropdownButtonFormField<StoryLocation>(
               initialValue: _location,
               decoration: const InputDecoration(
-                labelText: 'Location',
+                labelText: 'Bối cảnh',
                 prefixIcon: Icon(Icons.place_rounded),
               ),
               items: provider.locations
@@ -2812,7 +2812,7 @@ class _SceneSheetState extends State<_SceneSheet> {
             DropdownButtonFormField<String>(
               initialValue: _status,
               decoration: const InputDecoration(
-                labelText: 'Status',
+                labelText: 'Trạng thái',
                 prefixIcon: Icon(Icons.flag_rounded),
               ),
               items: const ['TODO', 'IN_PROGRESS', 'DONE']
@@ -2830,7 +2830,7 @@ class _SceneSheetState extends State<_SceneSheet> {
               controller: _minutes,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Estimated minutes',
+                labelText: 'Thời lượng ước tính (phút)',
                 prefixIcon: Icon(Icons.timer_rounded),
               ),
             ),
@@ -2839,18 +2839,18 @@ class _SceneSheetState extends State<_SceneSheet> {
               controller: _summary,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: 'Summary',
+                labelText: 'Tóm tắt',
                 prefixIcon: Icon(Icons.subject_rounded),
               ),
               validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter a scene summary'
+                  ? 'Nhập tóm tắt cảnh'
                   : null,
             ),
             const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Characters',
+                'Nhân vật',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       color: CineXPalette.textPrimary,
                     ),
@@ -2887,7 +2887,7 @@ class _SceneSheetState extends State<_SceneSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.add_rounded),
-              label: const Text('Create scene'),
+              label: const Text('Tạo cảnh'),
             ),
           ],
         ),
@@ -2943,8 +2943,8 @@ class _CharacterSheetState extends State<_CharacterSheet> {
   @override
   Widget build(BuildContext context) {
     return _SheetFrame(
-      title: 'Create character',
-      subtitle: 'Add role, notes, and later attach a portrait.',
+      title: 'Tạo nhân vật',
+      subtitle: 'Thêm vai trò, ghi chú và có thể gắn chân dung sau.',
       child: Form(
         key: _formKey,
         child: Column(
@@ -2952,17 +2952,17 @@ class _CharacterSheetState extends State<_CharacterSheet> {
             TextFormField(
               controller: _name,
               decoration: const InputDecoration(
-                labelText: 'Name',
+                labelText: 'Tên',
                 prefixIcon: Icon(Icons.person_rounded),
               ),
               validator: (value) =>
-                  value == null || value.trim().isEmpty ? 'Enter a name' : null,
+                  value == null || value.trim().isEmpty ? 'Nhập tên' : null,
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               initialValue: _role,
               decoration: const InputDecoration(
-                labelText: 'Role',
+                labelText: 'Vai trò',
                 prefixIcon: Icon(Icons.badge_rounded),
               ),
               items: const ['MAIN', 'SUPPORT', 'CROWD']
@@ -2980,7 +2980,7 @@ class _CharacterSheetState extends State<_CharacterSheet> {
               controller: _description,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: 'Short description',
+                labelText: 'Mô tả ngắn',
                 prefixIcon: Icon(Icons.notes_rounded),
               ),
             ),
@@ -2994,7 +2994,7 @@ class _CharacterSheetState extends State<_CharacterSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.person_add_alt_rounded),
-              label: const Text('Create character'),
+              label: const Text('Tạo nhân vật'),
             ),
           ],
         ),
@@ -3042,8 +3042,8 @@ class _LocationSheetState extends State<_LocationSheet> {
   @override
   Widget build(BuildContext context) {
     return _SheetFrame(
-      title: 'Create location',
-      subtitle: 'Track interiors, exteriors, and shooting time.',
+      title: 'Tạo bối cảnh',
+      subtitle: 'Theo dõi nội/ngoại cảnh và thời điểm quay.',
       child: Form(
         key: _formKey,
         child: Column(
@@ -3051,17 +3051,17 @@ class _LocationSheetState extends State<_LocationSheet> {
             TextFormField(
               controller: _name,
               decoration: const InputDecoration(
-                labelText: 'Location name',
+                labelText: 'Tên bối cảnh',
                 prefixIcon: Icon(Icons.place_rounded),
               ),
               validator: (value) =>
-                  value == null || value.trim().isEmpty ? 'Enter a name' : null,
+                  value == null || value.trim().isEmpty ? 'Nhập tên' : null,
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               initialValue: _setting,
               decoration: const InputDecoration(
-                labelText: 'Setting',
+                labelText: 'Loại bối cảnh',
                 prefixIcon: Icon(Icons.meeting_room_rounded),
               ),
               items: const ['INT', 'EXT']
@@ -3079,7 +3079,7 @@ class _LocationSheetState extends State<_LocationSheet> {
             DropdownButtonFormField<String>(
               initialValue: _time,
               decoration: const InputDecoration(
-                labelText: 'Time of day',
+                labelText: 'Thời điểm',
                 prefixIcon: Icon(Icons.wb_twilight_rounded),
               ),
               items: const ['DAY', 'NIGHT']
@@ -3097,7 +3097,7 @@ class _LocationSheetState extends State<_LocationSheet> {
               controller: _notes,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: 'Production note',
+                labelText: 'Ghi chú sản xuất',
                 prefixIcon: Icon(Icons.notes_rounded),
               ),
             ),
@@ -3111,7 +3111,7 @@ class _LocationSheetState extends State<_LocationSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.add_location_alt_rounded),
-              label: const Text('Create location'),
+              label: const Text('Tạo bối cảnh'),
             ),
           ],
         ),
@@ -3141,14 +3141,14 @@ Future<void> _exportPdf(BuildContext context) async {
     await Printing.layoutPdf(onLayout: (_) async => bytes);
   } else if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Unable to export PDF')),
+      const SnackBar(content: Text('Không thể xuất PDF')),
     );
   }
 }
 
 void _showFeatureMessage(BuildContext context, String feature) {
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('$feature is ready for the next backend endpoint')),
+    SnackBar(content: Text('$feature đã sẵn sàng cho API tiếp theo')),
   );
 }
 

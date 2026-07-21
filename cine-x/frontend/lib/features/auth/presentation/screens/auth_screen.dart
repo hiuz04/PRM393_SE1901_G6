@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/backend_connection_banner.dart';
-import '../providers/auth_provider.dart';
+import '../../../../providers/auth_provider.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -17,9 +17,9 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _email = TextEditingController(text: 'owner@cinex.local');
-  final _password = TextEditingController(text: 'CineX@123');
-  final _confirm = TextEditingController(text: 'CineX@123');
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
   bool _register = false;
   bool _obscure = true;
 
@@ -73,6 +73,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                       () => _obscure = !_obscure,
                                     ),
                                     onSubmit: _submit,
+                                    onOffline: _useOffline,
                                   ),
                                 ),
                               ],
@@ -97,6 +98,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                     () => _obscure = !_obscure,
                                   ),
                                   onSubmit: _submit,
+                                  onOffline: _useOffline,
                                 ),
                               ],
                             ),
@@ -129,6 +131,10 @@ class _AuthScreenState extends State<AuthScreen> {
       await auth.login(_email.text, _password.text);
     }
   }
+
+  Future<void> _useOffline() async {
+    await context.read<AuthProvider>().useOfflineGuest();
+  }
 }
 
 class _AuthCard extends StatelessWidget {
@@ -145,6 +151,7 @@ class _AuthCard extends StatelessWidget {
     required this.onToggleMode,
     required this.onTogglePassword,
     required this.onSubmit,
+    required this.onOffline,
   });
 
   final GlobalKey<FormState> formKey;
@@ -159,6 +166,7 @@ class _AuthCard extends StatelessWidget {
   final VoidCallback onToggleMode;
   final VoidCallback onTogglePassword;
   final VoidCallback onSubmit;
+  final VoidCallback onOffline;
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +192,7 @@ class _AuthCard extends StatelessWidget {
             padding: const EdgeInsets.all(26),
             child: Form(
               key: formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -194,7 +203,7 @@ class _AuthCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          register ? 'Create your studio' : 'Welcome back',
+                          register ? 'Tạo studio của bạn' : 'Chào mừng trở lại',
                           style: theme.textTheme.headlineSmall?.copyWith(
                             color: CineXPalette.textPrimary,
                           ),
@@ -202,8 +211,8 @@ class _AuthCard extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           register
-                              ? 'Start planning scripts, scenes, locations, and production boards.'
-                              : 'Sign in to your screenplay planning workspace.',
+                              ? 'Bắt đầu lập kế hoạch kịch bản, cảnh quay, bối cảnh và bảng sản xuất.'
+                              : 'Đăng nhập vào không gian lập kế hoạch kịch bản của bạn.',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: CineXPalette.textSecondary,
                           ),
@@ -224,12 +233,12 @@ class _AuthCard extends StatelessWidget {
                                 controller: name,
                                 textInputAction: TextInputAction.next,
                                 decoration: const InputDecoration(
-                                  labelText: 'Display name',
+                                  labelText: 'Tên hiển thị',
                                   prefixIcon: Icon(Icons.badge_rounded),
                                 ),
                                 validator: (value) =>
                                     (value == null || value.trim().isEmpty)
-                                        ? 'Enter your display name'
+                                        ? 'Vui lòng nhập tên hiển thị'
                                         : null,
                               ),
                               const SizedBox(height: 14),
@@ -243,13 +252,13 @@ class _AuthCard extends StatelessWidget {
                     textInputAction: TextInputAction.next,
                     autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(
-                      labelText: 'Email',
+                      labelText: 'Địa chỉ email',
                       prefixIcon: Icon(Icons.alternate_email_rounded),
                     ),
                     validator: (value) {
                       final text = value?.trim() ?? '';
                       if (!text.contains('@')) {
-                        return 'Enter a valid email address';
+                        return 'Vui lòng nhập email hợp lệ';
                       }
                       return null;
                     },
@@ -262,10 +271,10 @@ class _AuthCard extends StatelessWidget {
                         register ? TextInputAction.next : TextInputAction.done,
                     autofillHints: const [AutofillHints.password],
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      labelText: 'Mật khẩu',
                       prefixIcon: const Icon(Icons.lock_rounded),
                       suffixIcon: IconButton(
-                        tooltip: obscure ? 'Show password' : 'Hide password',
+                        tooltip: obscure ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
                         onPressed: onTogglePassword,
                         icon: Icon(
                           obscure
@@ -276,11 +285,11 @@ class _AuthCard extends StatelessWidget {
                     ),
                     validator: (value) {
                       final text = value ?? '';
-                      if (text.length < 8) return 'Use at least 8 characters';
+                      if (text.length < 8) return 'Dùng ít nhất 8 ký tự';
                       if (!RegExp('[A-Z]').hasMatch(text) ||
                           !RegExp('[a-z]').hasMatch(text) ||
                           !RegExp(r'\d').hasMatch(text)) {
-                        return 'Use uppercase, lowercase, and a number';
+                        return 'Cần có chữ hoa, chữ thường và số';
                       }
                       return null;
                     },
@@ -295,11 +304,11 @@ class _AuthCard extends StatelessWidget {
                       obscureText: obscure,
                       textInputAction: TextInputAction.done,
                       decoration: const InputDecoration(
-                        labelText: 'Confirm password',
+                        labelText: 'Xác nhận mật khẩu',
                         prefixIcon: Icon(Icons.lock_reset_rounded),
                       ),
                       validator: (value) => value != password.text
-                          ? 'Passwords do not match'
+                          ? 'Mật khẩu xác nhận không khớp'
                           : null,
                       onFieldSubmitted: (_) => onSubmit(),
                     ),
@@ -342,15 +351,21 @@ class _AuthCard extends StatelessWidget {
                                 ? Icons.person_add_alt_rounded
                                 : Icons.login_rounded,
                           ),
-                    label: Text(register ? 'Create account' : 'Sign in'),
+                    label: Text(register ? 'Tạo tài khoản' : 'Đăng nhập'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: loading ? null : onOffline,
+                    icon: const Icon(Icons.phone_android_rounded),
+                    label: const Text('Dùng ngoại tuyến'),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: loading ? null : onToggleMode,
                     child: Text(
                       register
-                          ? 'Already have an account? Sign in'
-                          : 'New to CINE-X? Create an account',
+                          ? 'Đã có tài khoản? Đăng nhập'
+                          : 'Mới dùng CINE-X? Tạo tài khoản',
                     ),
                   ),
                 ],
@@ -387,7 +402,7 @@ class _BrandPanel extends StatelessWidget {
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: Text(
-            'A premium workspace for screenplay planning, visual boards, cast tracking, and production analytics.',
+            'Không gian cao cấp để lập kế hoạch kịch bản, bảng hình ảnh, theo dõi diễn viên và phân tích sản xuất.',
             style: theme.textTheme.titleMedium?.copyWith(
               color: CineXPalette.textSecondary,
               height: 1.5,
@@ -399,10 +414,10 @@ class _BrandPanel extends StatelessWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            _FeaturePill(icon: Icons.view_kanban_rounded, label: 'Storyboard'),
-            _FeaturePill(icon: Icons.groups_rounded, label: 'Characters'),
-            _FeaturePill(icon: Icons.location_on_rounded, label: 'Locations'),
-            _FeaturePill(icon: Icons.pie_chart_rounded, label: 'Analytics'),
+            _FeaturePill(icon: Icons.view_kanban_rounded, label: 'Bảng cảnh'),
+            _FeaturePill(icon: Icons.groups_rounded, label: 'Nhân vật'),
+            _FeaturePill(icon: Icons.location_on_rounded, label: 'Bối cảnh'),
+            _FeaturePill(icon: Icons.pie_chart_rounded, label: 'Phân tích'),
           ],
         ),
       ],

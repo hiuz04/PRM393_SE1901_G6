@@ -1,7 +1,7 @@
 package com.cinex.location.dto;
 
-import com.cinex.location.SettingType;
-import com.cinex.location.TimeOfDay;
+import com.cinex.location.domain.SettingType;
+import com.cinex.location.domain.TimeOfDay;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;

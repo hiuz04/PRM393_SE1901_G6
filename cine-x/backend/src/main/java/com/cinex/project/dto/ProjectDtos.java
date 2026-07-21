@@ -1,6 +1,6 @@
 package com.cinex.project.dto;
 
-import com.cinex.project.ProjectStatus;
+import com.cinex.project.domain.ProjectStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;

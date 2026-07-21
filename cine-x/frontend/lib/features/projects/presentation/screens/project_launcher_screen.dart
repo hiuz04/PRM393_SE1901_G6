@@ -3,13 +3,17 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/validators/form_validators.dart';
 import '../../../../core/widgets/state_views.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../data/models/cinex_models.dart';
-import '../../data/repositories/cinex_repository.dart';
-import '../providers/project_provider.dart';
-import '../providers/workspace_provider.dart';
-import 'project_workspace_screen.dart';
+import '../../../../models/cinex_models.dart';
+import '../../../../providers/auth_provider.dart';
+import '../../../../providers/project_provider.dart';
+import '../../../../providers/workspace_provider.dart';
+import '../../../../repositories/cinex_repository.dart';
+import '../../../synchronization/presentation/providers/sync_provider.dart';
+import '../../../synchronization/presentation/screens/sync_center_screen.dart';
+import '../project_labels.dart';
+import 'project_workspace_v2_screen.dart';
 
 class ProjectLauncherScreen extends StatefulWidget {
   const ProjectLauncherScreen({super.key});
@@ -28,7 +32,10 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
     if (!_started) {
       _started = true;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => context.read<ProjectProvider>().load(),
+        (_) {
+          context.read<ProjectProvider>().load();
+          _syncProvider(listen: false)?.refresh();
+        },
       );
     }
   }
@@ -42,6 +49,7 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ProjectProvider>();
+    final sync = _syncProvider();
     final user = context.watch<AuthProvider>().user;
     return Scaffold(
       extendBody: true,
@@ -52,10 +60,12 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
           slivers: [
             SliverToBoxAdapter(
               child: _LauncherHeader(
-                userName: user?.displayName ?? 'Creator',
+                userName: user?.displayName ?? 'Nhà sáng tạo',
                 search: _search,
                 onSearch: () => provider.load(search: _search.text.trim()),
                 onLogout: () => context.read<AuthProvider>().logout(),
+                onSync: _openSyncCenter,
+                pendingSyncCount: sync?.summary.pendingTotal ?? 0,
               ),
             ),
             SliverToBoxAdapter(
@@ -65,15 +75,16 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
               child: _QuickActions(
                 hasProjects: provider.projects.isNotEmpty,
                 onCreate: _showCreateProject,
-                onCharacters: () => _openFirstProject(2),
-                onLocations: () => _openFirstProject(3),
-                onAnalytics: () => _openFirstProject(4),
+                onCharacters: () => _openFirstProject(1),
+                onLocations: () => _openFirstProject(1),
+                onAnalytics: () => _openFirstProject(3),
+                onSync: _openSyncCenter,
               ),
             ),
             if (provider.loading)
               const SliverFillRemaining(
                 hasScrollBody: false,
-                child: LoadingView(message: 'Loading projects'),
+                child: LoadingView(message: 'Đang tải dự án'),
               )
             else if (provider.error != null)
               SliverFillRemaining(
@@ -87,14 +98,14 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: EmptyView(
-                  title: 'No projects yet',
+                  title: 'Chưa có dự án',
                   message:
-                      'Create a screenplay workspace with acts, scenes, cast, locations, and production analytics.',
+                      'Tạo không gian kịch bản với hồi, cảnh, diễn viên, bối cảnh và phân tích sản xuất.',
                   icon: Icons.movie_creation_rounded,
                   action: FilledButton.icon(
                     onPressed: _showCreateProject,
                     icon: const Icon(Icons.add_rounded),
-                    label: const Text('Create project'),
+                    label: const Text('Tạo dự án'),
                   ),
                 ),
               )
@@ -133,7 +144,7 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCreateProject,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('New project'),
+        label: const Text('Dự án mới'),
       ),
     );
   }
@@ -142,7 +153,7 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
     final projects = context.read<ProjectProvider>().projects;
     if (projects.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Create a project first')),
+        const SnackBar(content: Text('Hãy tạo một dự án trước')),
       );
       return;
     }
@@ -179,6 +190,20 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
     );
   }
 
+  void _openSyncCenter() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SyncCenterScreen()),
+    );
+  }
+
+  SyncProvider? _syncProvider({bool listen = true}) {
+    try {
+      return Provider.of<SyncProvider>(context, listen: listen);
+    } on ProviderNotFoundException {
+      return null;
+    }
+  }
+
   Future<void> _showCreateProject() async {
     final created = await showModalBottomSheet<bool>(
       context: context,
@@ -190,19 +215,25 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
           genre,
           description,
           posterUrl,
+          startDate,
+          endDate,
+          required maxShootingMinutesPerDay,
         }) {
           return context.read<ProjectProvider>().create(
                 title,
                 genre: genre,
                 description: description,
                 posterUrl: posterUrl,
+                startDate: startDate,
+                endDate: endDate,
+                maxShootingMinutesPerDay: maxShootingMinutesPerDay,
               );
         },
       ),
     );
     if (created == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Project created')),
+        const SnackBar(content: Text('Đã tạo dự án')),
       );
     }
   }
@@ -214,12 +245,16 @@ class _LauncherHeader extends StatelessWidget {
     required this.search,
     required this.onSearch,
     required this.onLogout,
+    required this.onSync,
+    required this.pendingSyncCount,
   });
 
   final String userName;
   final TextEditingController search;
   final VoidCallback onSearch;
   final VoidCallback onLogout;
+  final VoidCallback onSync;
+  final int pendingSyncCount;
 
   @override
   Widget build(BuildContext context) {
@@ -254,7 +289,7 @@ class _LauncherHeader extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Good to see you, $userName',
+                        'Rất vui gặp lại, $userName',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -263,7 +298,7 @@ class _LauncherHeader extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'CINE-X Studio',
+                        'Studio CINE-X',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.headlineSmall?.copyWith(
@@ -274,7 +309,19 @@ class _LauncherHeader extends StatelessWidget {
                   ),
                 ),
                 Tooltip(
-                  message: 'Sign out',
+                  message: 'Trung tâm đồng bộ',
+                  child: Badge(
+                    isLabelVisible: pendingSyncCount > 0,
+                    label: Text('$pendingSyncCount'),
+                    child: IconButton.filledTonal(
+                      onPressed: onSync,
+                      icon: const Icon(Icons.cloud_sync_rounded),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Đăng xuất',
                   child: IconButton.filledTonal(
                     onPressed: onLogout,
                     icon: const Icon(Icons.logout_rounded),
@@ -287,10 +334,10 @@ class _LauncherHeader extends StatelessWidget {
               controller: search,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Search projects, genres, or production notes',
+                hintText: 'Tìm dự án, thể loại hoặc ghi chú sản xuất',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: IconButton(
-                  tooltip: 'Search',
+                  tooltip: 'Tìm kiếm',
                   onPressed: onSearch,
                   icon: const Icon(Icons.arrow_forward_rounded),
                 ),
@@ -334,25 +381,25 @@ class _StatsStrip extends StatelessWidget {
           final cards = [
             _StatCard(
               icon: Icons.folder_special_rounded,
-              label: 'Projects',
+              label: 'Dự án',
               value: '${projects.length}',
               accent: CineXPalette.primary,
             ),
             _StatCard(
               icon: Icons.bolt_rounded,
-              label: 'Active',
+              label: 'Đang chạy',
               value: '$active',
               accent: CineXPalette.accent,
             ),
             _StatCard(
               icon: Icons.donut_large_rounded,
-              label: 'Average progress',
+              label: 'Tiến độ TB',
               value: '${averageProgress.toStringAsFixed(0)}%',
               accent: CineXPalette.success,
             ),
             _StatCard(
               icon: Icons.schedule_rounded,
-              label: 'Last edited',
+              label: 'Sửa gần đây',
               value: edited.isEmpty ? '--' : _formatShortDate(edited.first),
               accent: CineXPalette.secondary,
             ),
@@ -393,6 +440,7 @@ class _QuickActions extends StatelessWidget {
     required this.onCharacters,
     required this.onLocations,
     required this.onAnalytics,
+    required this.onSync,
   });
 
   final bool hasProjects;
@@ -400,6 +448,7 @@ class _QuickActions extends StatelessWidget {
   final VoidCallback onCharacters;
   final VoidCallback onLocations;
   final VoidCallback onAnalytics;
+  final VoidCallback onSync;
 
   @override
   Widget build(BuildContext context) {
@@ -409,7 +458,7 @@ class _QuickActions extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Quick actions',
+            'Thao tác nhanh',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: CineXPalette.textPrimary,
                 ),
@@ -421,26 +470,31 @@ class _QuickActions extends StatelessWidget {
             children: [
               _ActionChipButton(
                 icon: Icons.add_rounded,
-                label: 'Create project',
+                label: 'Tạo dự án',
                 onTap: onCreate,
               ),
               _ActionChipButton(
                 icon: Icons.groups_rounded,
-                label: 'Characters',
+                label: 'Nhân vật',
                 enabled: hasProjects,
                 onTap: onCharacters,
               ),
               _ActionChipButton(
                 icon: Icons.location_on_rounded,
-                label: 'Locations',
+                label: 'Bối cảnh',
                 enabled: hasProjects,
                 onTap: onLocations,
               ),
               _ActionChipButton(
                 icon: Icons.insights_rounded,
-                label: 'Analytics',
+                label: 'Phân tích',
                 enabled: hasProjects,
                 onTap: onAnalytics,
+              ),
+              _ActionChipButton(
+                icon: Icons.cloud_sync_rounded,
+                label: 'Đồng bộ',
+                onTap: onSync,
               ),
             ],
           ),
@@ -641,7 +695,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                           Row(
                             children: [
                               _MiniChip(
-                                label: project.status,
+                                label: projectStatusLabel(project.status),
                                 color: CineXPalette.success,
                               ),
                               const Spacer(),
@@ -656,7 +710,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                           const Spacer(),
                           _MiniChip(
                             label: project.genre?.trim().isEmpty ?? true
-                                ? 'Genre unset'
+                                ? 'Chưa có thể loại'
                                 : project.genre!,
                             color: CineXPalette.accent,
                           ),
@@ -680,21 +734,21 @@ class _ProjectCardState extends State<_ProjectCard> {
                               Expanded(
                                 child: _ProjectMeta(
                                   icon: Icons.view_kanban_rounded,
-                                  label: 'Scenes',
+                                  label: 'Cảnh',
                                   value: '--',
                                 ),
                               ),
                               Expanded(
                                 child: _ProjectMeta(
                                   icon: Icons.groups_rounded,
-                                  label: 'Cast',
+                                  label: 'Vai',
                                   value: '--',
                                 ),
                               ),
                               Expanded(
                                 child: _ProjectMeta(
                                   icon: Icons.location_on_rounded,
-                                  label: 'Places',
+                                  label: 'Bối cảnh',
                                   value: '--',
                                 ),
                               ),
@@ -711,7 +765,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  'Last edited ${_formatRelative(project)}',
+                                  'Sửa lần cuối ${_formatRelative(project)}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context)
@@ -912,6 +966,9 @@ class _CreateProjectSheet extends StatefulWidget {
     String? genre,
     String? description,
     String? posterUrl,
+    DateTime? startDate,
+    DateTime? endDate,
+    required int maxShootingMinutesPerDay,
   }) onCreate;
 
   @override
@@ -924,6 +981,11 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
   final _genre = TextEditingController();
   final _description = TextEditingController();
   final _posterUrl = TextEditingController();
+  final _startDate = TextEditingController();
+  final _endDate = TextEditingController();
+  final _maxMinutes = TextEditingController(text: '480');
+  DateTime? _selectedStartDate;
+  DateTime? _selectedEndDate;
   bool _saving = false;
 
   @override
@@ -932,6 +994,9 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
     _genre.dispose();
     _description.dispose();
     _posterUrl.dispose();
+    _startDate.dispose();
+    _endDate.dispose();
+    _maxMinutes.dispose();
     super.dispose();
   }
 
@@ -945,6 +1010,7 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 26),
         child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -961,14 +1027,14 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
               ),
               const SizedBox(height: 22),
               Text(
-                'Create project',
+                'Tạo dự án',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: CineXPalette.textPrimary,
                     ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Set up a cinematic workspace for a new screenplay.',
+                'Thiết lập không gian điện ảnh cho kịch bản mới.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: CineXPalette.textSecondary,
                     ),
@@ -1014,19 +1080,17 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
                 controller: _title,
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                  labelText: 'Project title',
+                  labelText: 'Tiêu đề dự án',
                   prefixIcon: Icon(Icons.movie_creation_rounded),
                 ),
-                validator: (value) => (value == null || value.trim().isEmpty)
-                    ? 'Enter a project title'
-                    : null,
+                validator: ProjectValidators.title,
               ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _genre,
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                  labelText: 'Genre',
+                  labelText: 'Thể loại',
                   prefixIcon: Icon(Icons.theater_comedy_rounded),
                 ),
               ),
@@ -1035,7 +1099,7 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
                 controller: _posterUrl,
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                  labelText: 'Poster image URL',
+                  labelText: 'URL poster',
                   prefixIcon: Icon(Icons.image_rounded),
                 ),
               ),
@@ -1044,9 +1108,52 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
                 controller: _description,
                 maxLines: 4,
                 decoration: const InputDecoration(
-                  labelText: 'Logline or production note',
+                  labelText: 'Logline hoặc ghi chú sản xuất',
                   prefixIcon: Icon(Icons.notes_rounded),
                 ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _startDate,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Ngày bắt đầu',
+                        prefixIcon: Icon(Icons.event_available_rounded),
+                      ),
+                      onTap: () => _pickDate(start: true),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _endDate,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Ngày kết thúc',
+                        prefixIcon: Icon(Icons.event_busy_rounded),
+                      ),
+                      validator: (_) => ProjectValidators.dateRange(
+                        _selectedStartDate,
+                        _selectedEndDate,
+                      ),
+                      onTap: () => _pickDate(start: false),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _maxMinutes,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Số phút quay tối đa mỗi ngày',
+                  prefixIcon: Icon(Icons.timer_rounded),
+                ),
+                validator: ProjectValidators.maxMinutes,
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
@@ -1058,7 +1165,7 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.add_rounded),
-                label: const Text('Create project'),
+                label: const Text('Tạo dự án'),
               ),
             ],
           ),
@@ -1075,11 +1182,36 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
       genre: _emptyToNull(_genre.text),
       description: _emptyToNull(_description.text),
       posterUrl: _emptyToNull(_posterUrl.text),
+      startDate: _selectedStartDate,
+      endDate: _selectedEndDate,
+      maxShootingMinutesPerDay: int.parse(_maxMinutes.text.trim()),
     );
     if (mounted) {
       setState(() => _saving = false);
       Navigator.pop(context, ok);
     }
+  }
+
+  Future<void> _pickDate({required bool start}) async {
+    final current = start ? _selectedStartDate : _selectedEndDate;
+    final initialDate = current ?? _selectedStartDate ?? DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (!mounted || date == null) return;
+    setState(() {
+      if (start) {
+        _selectedStartDate = date;
+        _startDate.text = DateFormat.yMMMd('vi_VN').format(date);
+      } else {
+        _selectedEndDate = date;
+        _endDate.text = DateFormat.yMMMd('vi_VN').format(date);
+      }
+    });
+    _formKey.currentState?.validate();
   }
 }
 
@@ -1091,15 +1223,15 @@ String? _emptyToNull(String value) {
 String _formatShortDate(Project project) {
   final date = project.updatedAt ?? project.createdAt;
   if (date == null) return '--';
-  return DateFormat.MMMd().format(date);
+  return DateFormat.MMMd('vi_VN').format(date);
 }
 
 String _formatRelative(Project project) {
   final date = project.updatedAt ?? project.createdAt ?? project.startDate;
-  if (date == null) return 'recently';
+  if (date == null) return 'gần đây';
   final days = DateTime.now().difference(date).inDays;
-  if (days <= 0) return 'today';
-  if (days == 1) return 'yesterday';
-  if (days < 7) return '$days days ago';
-  return DateFormat.MMMd().format(date);
+  if (days <= 0) return 'hôm nay';
+  if (days == 1) return 'hôm qua';
+  if (days < 7) return '$days ngày trước';
+  return DateFormat.MMMd('vi_VN').format(date);
 }

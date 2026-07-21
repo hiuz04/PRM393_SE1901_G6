@@ -1,7 +1,7 @@
 package com.cinex.analytics.dto;
 
-import com.cinex.location.SettingType;
-import com.cinex.scene.SceneStatus;
+import com.cinex.location.domain.SettingType;
+import com.cinex.scene.domain.SceneStatus;
 import java.util.List;
 import java.util.Map;
 

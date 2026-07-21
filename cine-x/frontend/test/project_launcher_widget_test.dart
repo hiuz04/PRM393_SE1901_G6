@@ -1,6 +1,6 @@
-import 'package:cine_x/features/auth/presentation/providers/auth_provider.dart';
-import 'package:cine_x/features/projects/presentation/providers/project_provider.dart';
 import 'package:cine_x/features/projects/presentation/screens/project_launcher_screen.dart';
+import 'package:cine_x/providers/auth_provider.dart';
+import 'package:cine_x/providers/project_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +20,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('No projects yet'), findsOneWidget);
+    expect(find.text('Chưa có dự án'), findsOneWidget);
   });
 }

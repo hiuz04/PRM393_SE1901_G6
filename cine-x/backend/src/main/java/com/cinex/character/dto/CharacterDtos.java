@@ -1,6 +1,6 @@
 package com.cinex.character.dto;
 
-import com.cinex.character.CharacterRoleType;
+import com.cinex.character.domain.CharacterRoleType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;

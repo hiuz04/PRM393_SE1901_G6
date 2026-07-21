@@ -10,6 +10,16 @@ Request flow:
 Controller -> Service -> Repository -> PostgreSQL
 ```
 
+Package structure:
+
+```text
+com.cinex.<feature>.controller
+com.cinex.<feature>.service
+com.cinex.<feature>.repository
+com.cinex.<feature>.domain
+com.cinex.<feature>.dto
+```
+
 Rules:
 
 - Controllers never access repositories directly.

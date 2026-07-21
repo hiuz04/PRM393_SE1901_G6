@@ -1,15 +1,15 @@
 package com.cinex.scene.dto;
 
-import com.cinex.character.CharacterRoleType;
-import com.cinex.location.SettingType;
-import com.cinex.location.TimeOfDay;
-import com.cinex.scene.SceneStatus;
-import jakarta.validation.Valid;
+import com.cinex.character.domain.CharacterRoleType;
+import com.cinex.location.domain.SettingType;
+import com.cinex.location.domain.TimeOfDay;
+import com.cinex.scene.domain.SceneStatus;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.List;
 

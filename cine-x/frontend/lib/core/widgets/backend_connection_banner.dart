@@ -32,26 +32,26 @@ class _BackendConnectionBannerState extends State<BackendConnectionBanner> {
     final colors = theme.colorScheme;
     final (icon, label, foreground, background) = switch (connection.status) {
       BackendConnectionStatus.online => (
-          Icons.cloud_done_rounded,
-          'Studio server online',
+          Icons.storage_rounded,
+          'Không gian SQLite cục bộ đã sẵn sàng',
           CineXPalette.success,
           CineXPalette.success.withAlpha(24),
         ),
       BackendConnectionStatus.offline => (
-          Icons.cloud_off_rounded,
-          connection.error ?? 'Unable to connect to the server',
+          Icons.report_gmailerrorred_rounded,
+          connection.error ?? 'Không thể mở cơ sở dữ liệu cục bộ',
           colors.error,
           colors.error.withAlpha(24),
         ),
       BackendConnectionStatus.checking => (
           Icons.sync_rounded,
-          'Checking studio server',
+          'Đang kiểm tra cơ sở dữ liệu cục bộ',
           CineXPalette.accent,
           CineXPalette.accent.withAlpha(24),
         ),
       BackendConnectionStatus.idle => (
-          Icons.cloud_queue_rounded,
-          'Server status not checked',
+          Icons.storage_outlined,
+          'Chưa kiểm tra trạng thái cơ sở dữ liệu cục bộ',
           CineXPalette.textSecondary,
           CineXPalette.surface.withAlpha(160),
         ),
@@ -88,7 +88,7 @@ class _BackendConnectionBannerState extends State<BackendConnectionBanner> {
               ),
             ),
             IconButton(
-              tooltip: 'Recheck server',
+              tooltip: 'Kiểm tra lại cơ sở dữ liệu cục bộ',
               onPressed: connection.checking ? null : connection.check,
               icon: connection.checking
                   ? SizedBox(
