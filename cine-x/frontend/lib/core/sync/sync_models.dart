@@ -160,3 +160,60 @@ class SyncSummary {
   int get pendingTotal =>
       pendingCreates + pendingUpdates + pendingDeletes + pendingUploads;
 }
+
+enum SyncDetailKind {
+  pendingCreate,
+  pendingUpdate,
+  pendingDelete,
+  pendingUpload,
+  failed,
+  conflicts,
+}
+
+class SyncDetailItem {
+  const SyncDetailItem({
+    required this.entityType,
+    required this.entityId,
+    required this.operation,
+    required this.title,
+    this.error,
+    this.projectId,
+    this.retryCount = 0,
+    this.conflictingFields = const [],
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final String entityType;
+  final String entityId;
+  final String operation;
+  final String title;
+  final String? error;
+  final String? projectId;
+  final int retryCount;
+  final List<String> conflictingFields;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+}
+
+class SyncProjectOption {
+  const SyncProjectOption({
+    required this.id,
+    required this.title,
+    required this.supportedItemCount,
+    this.genre,
+    this.updatedAt,
+    this.pendingCount = 0,
+    this.failedCount = 0,
+    this.uploaded = false,
+  });
+
+  final int id;
+  final String title;
+  final String? genre;
+  final DateTime? updatedAt;
+  final int supportedItemCount;
+  final int pendingCount;
+  final int failedCount;
+  final bool uploaded;
+}

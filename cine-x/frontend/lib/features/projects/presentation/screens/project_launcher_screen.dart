@@ -63,8 +63,10 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
                 userName: user?.displayName ?? 'Nhà sáng tạo',
                 search: _search,
                 onSearch: () => provider.load(search: _search.text.trim()),
+                onReload: () => provider.load(search: _search.text.trim()),
                 onLogout: () => context.read<AuthProvider>().logout(),
                 onSync: _openSyncCenter,
+                isReloading: provider.loading,
                 pendingSyncCount: sync?.summary.pendingTotal ?? 0,
               ),
             ),
@@ -77,7 +79,7 @@ class _ProjectLauncherScreenState extends State<ProjectLauncherScreen> {
                 onCreate: _showCreateProject,
                 onCharacters: () => _openFirstProject(1),
                 onLocations: () => _openFirstProject(1),
-                onAnalytics: () => _openFirstProject(3),
+                onAnalytics: () => _openFirstProject(4),
                 onSync: _openSyncCenter,
               ),
             ),
@@ -244,16 +246,20 @@ class _LauncherHeader extends StatelessWidget {
     required this.userName,
     required this.search,
     required this.onSearch,
+    required this.onReload,
     required this.onLogout,
     required this.onSync,
+    required this.isReloading,
     required this.pendingSyncCount,
   });
 
   final String userName;
   final TextEditingController search;
   final VoidCallback onSearch;
+  final VoidCallback onReload;
   final VoidCallback onLogout;
   final VoidCallback onSync;
+  final bool isReloading;
   final int pendingSyncCount;
 
   @override
@@ -308,6 +314,14 @@ class _LauncherHeader extends StatelessWidget {
                     ],
                   ),
                 ),
+                Tooltip(
+                  message: 'Tải lại dự án',
+                  child: IconButton.filledTonal(
+                    onPressed: isReloading ? null : onReload,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Tooltip(
                   message: 'Trung tâm đồng bộ',
                   child: Badge(

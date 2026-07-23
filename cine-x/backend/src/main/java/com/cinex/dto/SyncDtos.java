@@ -39,18 +39,19 @@ public final class SyncDtos {
     public record PushResult(
             String operationId,
             String status,
+            String remoteId,
             Long serverVersion,
             Instant serverUpdatedAt,
             String error,
             Map<String, Object> remotePayload,
             List<String> conflictingFields
     ) {
-        public static PushResult applied(String operationId, long serverVersion, Instant updatedAt) {
-            return new PushResult(operationId, "APPLIED", serverVersion, updatedAt, null, null, List.of());
+        public static PushResult applied(String operationId, String remoteId, long serverVersion, Instant updatedAt) {
+            return new PushResult(operationId, "APPLIED", remoteId, serverVersion, updatedAt, null, null, List.of());
         }
 
         public static PushResult rejected(String operationId, String status, String error) {
-            return new PushResult(operationId, status, null, null, error, null, List.of());
+            return new PushResult(operationId, status, null, null, null, error, null, List.of());
         }
     }
 

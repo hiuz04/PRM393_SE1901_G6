@@ -16,6 +16,14 @@ import '../../../../services/image_storage_service.dart';
 import '../../../../services/schedule_conflict_service.dart';
 import '../project_labels.dart';
 
+const _projectMemberRoles = [
+  'SCREENWRITER',
+  'PRODUCER',
+  'ASSISTANT_DIRECTOR',
+  'CREW',
+  'VIEWER',
+];
+
 class ProjectWorkspaceScreen extends StatefulWidget {
   const ProjectWorkspaceScreen({
     super.key,
@@ -50,6 +58,11 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen> {
       label: 'Lịch quay',
     ),
     NavigationDestination(
+      icon: Icon(Icons.manage_accounts_outlined),
+      selectedIcon: Icon(Icons.manage_accounts_rounded),
+      label: 'Thành viên',
+    ),
+    NavigationDestination(
       icon: Icon(Icons.insights_outlined),
       selectedIcon: Icon(Icons.insights_rounded),
       label: 'Phân tích',
@@ -69,6 +82,7 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen> {
       const _StoryPage(),
       const _ResourcesPage(),
       const _CalendarPage(),
+      const _MembersPage(),
       const _AnalyticsPage(),
     ];
 
@@ -247,16 +261,22 @@ class _WorkspaceFab extends StatelessWidget {
               : _showSceneSheet(context),
         ),
       1 => (
-          Icons.person_add_alt_rounded,
-          'Nhân vật mới',
-          ProjectPermission.manageCharacters,
-          () => _showCharacterSheet(context),
+          Icons.add_box_rounded,
+          'Tài nguyên mới',
+          ProjectPermission.manageResources,
+          () => _showResourceSheet(context),
         ),
       2 => (
           Icons.event_available_rounded,
           'Ngày quay mới',
           ProjectPermission.manageSchedule,
           () => _showShootingDaySheet(context),
+        ),
+      3 => (
+          Icons.person_add_alt_rounded,
+          'Thành viên mới',
+          ProjectPermission.manageMembers,
+          () => _showMemberSheet(context),
         ),
       _ => (
           Icons.picture_as_pdf_rounded,
@@ -1327,6 +1347,111 @@ class _AssetsListState extends State<_AssetsList> {
   }
 }
 
+class _MembersPage extends StatelessWidget {
+  const _MembersPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<WorkspaceProvider>();
+    final members = provider.members;
+    final canManage = provider.can(ProjectPermission.manageMembers);
+    if (members.isEmpty) {
+      return EmptyView(
+        title: 'Chưa có thành viên',
+        message: 'Mời biên kịch, nhà sản xuất hoặc đội quay vào dự án.',
+        icon: Icons.manage_accounts_rounded,
+        action: FilledButton.icon(
+          onPressed: canManage ? () => _showMemberSheet(context) : null,
+          icon: const Icon(Icons.person_add_alt_rounded),
+          label: const Text('Thêm thành viên'),
+        ),
+      );
+    }
+    final ownerCount =
+        members.where((member) => member.role == 'OWNER').length;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
+      children: [
+        _SectionToolbar(
+          title: 'Thành viên dự án (${members.length})',
+          actions: [
+            _ToolbarAction(
+              icon: Icons.person_add_alt_rounded,
+              tooltip: 'Thêm thành viên',
+              enabled: canManage,
+              onPressed: () => _showMemberSheet(context),
+            ),
+          ],
+        ),
+        ...members.map(
+          (member) {
+            final name = member.fullName?.trim().isNotEmpty == true
+                ? member.fullName!.trim()
+                : member.email ?? 'Thành viên';
+            final canDelete = canManage &&
+                !(member.role == 'OWNER' && ownerCount <= 1);
+            return _Panel(
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: CineXPalette.primary.withAlpha(36),
+                  foregroundColor: CineXPalette.textPrimary,
+                  child: Text(_initials(name)),
+                ),
+                title: Text(name),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(member.email ?? 'Chưa có email'),
+                    const SizedBox(height: 6),
+                    _Badge(label: projectRoleLabel(member.role)),
+                  ],
+                ),
+                trailing: Wrap(
+                  spacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    IconButton(
+                      tooltip: 'Sửa vai trò',
+                      onPressed: canManage
+                          ? () => _showMemberSheet(context, member: member)
+                          : null,
+                      icon: const Icon(Icons.edit_rounded),
+                    ),
+                    IconButton(
+                      tooltip: 'Xóa thành viên',
+                      onPressed: canDelete
+                          ? () async {
+                              final confirmed = await _confirm(
+                                context,
+                                title: 'Xóa thành viên?',
+                                message:
+                                    '$name sẽ không còn truy cập được dự án này.',
+                              );
+                              if (!context.mounted || !confirmed) return;
+                              final ok = await provider.deleteMember(member);
+                              if (!context.mounted) return;
+                              _snack(
+                                context,
+                                ok
+                                    ? 'Đã xóa thành viên'
+                                    : provider.error ?? 'Không thể xóa',
+                              );
+                            }
+                          : null,
+                      icon: const Icon(Icons.person_remove_rounded),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
 class _CalendarPage extends StatefulWidget {
   const _CalendarPage();
 
@@ -2182,225 +2307,6 @@ class _ShootingDayCard extends StatelessWidget {
   }
 }
 
-Future<void> _showScheduleSceneSheet(
-  BuildContext context, {
-  required Scene scene,
-}) async {
-  final provider = context.read<WorkspaceProvider>();
-  await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (_) => ChangeNotifierProvider.value(
-      value: provider,
-      child: _ScheduleSceneSheet(scene: scene),
-    ),
-  );
-}
-
-class _ScheduleSceneSheet extends StatefulWidget {
-  const _ScheduleSceneSheet({required this.scene});
-
-  final Scene scene;
-
-  @override
-  State<_ScheduleSceneSheet> createState() => _ScheduleSceneSheetState();
-}
-
-class _ScheduleSceneSheetState extends State<_ScheduleSceneSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _start = TextEditingController();
-  final _end = TextEditingController();
-  int? _dayId;
-  bool _saving = false;
-  bool _initialized = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialized) return;
-    final days = _activeSelectedDateDays(context.read<WorkspaceProvider>());
-    if (days.isNotEmpty) {
-      _dayId = days.first.id;
-      _fillSuggestedTimes(days.first);
-    }
-    _initialized = true;
-  }
-
-  @override
-  void dispose() {
-    _start.dispose();
-    _end.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<WorkspaceProvider>();
-    final days = _activeSelectedDateDays(provider);
-    final selectedDay = _selectedDay(days);
-    final projectedMinutes = selectedDay == null
-        ? null
-        : selectedDay.totalMinutes + widget.scene.estimatedDurationMinutes;
-    final overLimit = selectedDay != null &&
-        projectedMinutes != null &&
-        projectedMinutes > selectedDay.maxMinutes;
-
-    return _SheetFrame(
-      title: 'Xếp cảnh vào lịch',
-      child: Form(
-        key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _SceneScheduleSummary(scene: widget.scene),
-            const SizedBox(height: 12),
-            if (days.isEmpty)
-              const _InlineNotice(
-                icon: Icons.info_outline_rounded,
-                color: CineXPalette.warning,
-                message: 'Ngày đang chọn chưa có ca quay nháp/đang hoạt động.',
-              )
-            else
-              DropdownButtonFormField<int>(
-                initialValue: selectedDay?.id,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Ngày quay'),
-                items: [
-                  for (final day in days)
-                    DropdownMenuItem(
-                      value: day.id,
-                      child: _DropdownText(
-                        '${day.title} · ${day.totalMinutes}/${day.maxMinutes} phút',
-                      ),
-                    ),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (value) {
-                        final day = days.firstWhere(
-                          (item) => item.id == value,
-                          orElse: () => days.first,
-                        );
-                        setState(() {
-                          _dayId = day.id;
-                          _fillSuggestedTimes(day);
-                        });
-                      },
-                validator: (value) =>
-                    value == null ? 'Chọn ngày quay để xếp cảnh' : null,
-              ),
-            if (selectedDay != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Sau khi thêm: $projectedMinutes/${selectedDay.maxMinutes} phút',
-                style: TextStyle(
-                  color: overLimit
-                      ? CineXPalette.danger
-                      : CineXPalette.textSecondary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _ScheduleTimeField(
-                    controller: _start,
-                    label: 'Bắt đầu',
-                    onPick: () => _pickTime(_start),
-                    validator: (_) =>
-                        _timeRangeValidator(_start.text, _end.text),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ScheduleTimeField(
-                    controller: _end,
-                    label: 'Kết thúc',
-                    onPick: () => _pickTime(_end),
-                    validator: (_) =>
-                        _timeRangeValidator(_start.text, _end.text),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: _saving || days.isEmpty || overLimit ? null : _save,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Thêm vào lịch'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<ShootingDay> _activeSelectedDateDays(WorkspaceProvider provider) {
-    return provider.selectedDateDays.where((day) => day.isActive).toList();
-  }
-
-  ShootingDay? _selectedDay(List<ShootingDay> days) {
-    if (days.isEmpty) return null;
-    for (final day in days) {
-      if (day.id == _dayId) return day;
-    }
-    return days.first;
-  }
-
-  void _fillSuggestedTimes(ShootingDay day) {
-    final start = _nextAvailableMinute(day);
-    final end = start + widget.scene.estimatedDurationMinutes;
-    if (!_setClockRange(start, end)) {
-      _start.clear();
-      _end.clear();
-    }
-  }
-
-  Future<void> _pickTime(TextEditingController controller) async {
-    final current = _clockToMinutes(controller.text);
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: current == null
-          ? const TimeOfDay(hour: 8, minute: 0)
-          : TimeOfDay(hour: current ~/ 60, minute: current % 60),
-    );
-    if (picked == null || !mounted) return;
-    setState(() {
-      controller.text = _formatClock(picked.hour * 60 + picked.minute);
-    });
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate() || _dayId == null) return;
-    setState(() => _saving = true);
-    final provider = context.read<WorkspaceProvider>();
-    final ok = await provider.addSceneToShootingDay(
-      _dayId!,
-      widget.scene.id,
-      plannedStartTime: _emptyToNull(_start.text),
-      plannedEndTime: _emptyToNull(_end.text),
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    _snack(
-      context,
-      ok ? 'Đã thêm cảnh vào ngày quay' : provider.error ?? 'Không thể thêm cảnh',
-    );
-    if (ok) Navigator.pop(context, true);
-  }
-
-  bool _setClockRange(int start, int end) {
-    if (start < 0 || end <= start || end >= 24 * 60) return false;
-    _start.text = _formatClock(start);
-    _end.text = _formatClock(end);
-    return true;
-  }
-}
-
 Future<void> _showShootingSceneTimeSheet(
   BuildContext context, {
   required ShootingDay day,
@@ -3208,6 +3114,156 @@ class _InlineNotice extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+Future<void> _showMemberSheet(
+  BuildContext context, {
+  ProjectMember? member,
+}) async {
+  final provider = context.read<WorkspaceProvider>();
+  await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => ChangeNotifierProvider.value(
+      value: provider,
+      child: _MemberSheet(member: member),
+    ),
+  );
+}
+
+class _MemberSheet extends StatefulWidget {
+  const _MemberSheet({this.member});
+
+  final ProjectMember? member;
+
+  @override
+  State<_MemberSheet> createState() => _MemberSheetState();
+}
+
+class _MemberSheetState extends State<_MemberSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _fullName = TextEditingController();
+  late String _role;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final member = widget.member;
+    _email.text = member?.email ?? '';
+    _fullName.text = member?.fullName ?? '';
+    _role = member?.role ?? 'VIEWER';
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _fullName.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final editing = widget.member != null;
+    final roles = editing && widget.member!.role == 'OWNER'
+        ? const ['OWNER', ..._projectMemberRoles]
+        : _projectMemberRoles;
+    return _SheetFrame(
+      title: editing ? 'Sửa thành viên' : 'Thêm thành viên',
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _email,
+              readOnly: editing,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction:
+                  editing ? TextInputAction.done : TextInputAction.next,
+              validator: _emailValidator,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.alternate_email_rounded),
+              ),
+            ),
+            if (!editing) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _fullName,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Tên hiển thị',
+                  prefixIcon: Icon(Icons.badge_rounded),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _role,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Vai trò',
+                prefixIcon: Icon(Icons.admin_panel_settings_rounded),
+              ),
+              items: roles
+                  .map(
+                    (role) => DropdownMenuItem(
+                      value: role,
+                      child: _DropdownText(projectRoleLabel(role)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => _role = value ?? _role),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_rounded),
+              label: Text(editing ? 'Cập nhật' : 'Thêm thành viên'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _emailValidator(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Email là bắt buộc';
+    final valid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text);
+    return valid ? null : 'Email không hợp lệ';
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    final provider = context.read<WorkspaceProvider>();
+    final member = widget.member;
+    final ok = member == null
+        ? await provider.addMember(
+            email: _email.text.trim(),
+            fullName: _emptyToNull(_fullName.text),
+            role: _role,
+          )
+        : await provider.updateMember(member, _role);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    _snack(
+      context,
+      ok ? 'Đã lưu thành viên' : provider.error ?? 'Không thể lưu thành viên',
+    );
+    if (ok) Navigator.pop(context, true);
   }
 }
 
@@ -4969,21 +5025,6 @@ bool _sameDate(DateTime a, DateTime b) {
 
 DateTime _dateKey(DateTime date) {
   return DateTime(date.year, date.month, date.day);
-}
-
-int _nextAvailableMinute(ShootingDay day) {
-  var cursor = 8 * 60;
-  final scenes = [...day.scenes]
-    ..sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
-  for (final item in scenes) {
-    final end = _clockToMinutes(item.plannedEndTime);
-    if (end != null && end > cursor) {
-      cursor = end;
-    } else {
-      cursor += item.scene.estimatedDurationMinutes;
-    }
-  }
-  return cursor;
 }
 
 int _suggestedMinuteForScene(ShootingDay day, ShootingDayScene target) {

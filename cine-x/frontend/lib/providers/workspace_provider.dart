@@ -14,6 +14,7 @@ class WorkspaceProvider extends ChangeNotifier {
 
   Dashboard? dashboard;
   AnalyticsSummary? analytics;
+  List<ProjectMember> members = [];
   List<Act> acts = [];
   List<StoryCharacter> characters = [];
   List<StoryLocation> storyLocations = [];
@@ -46,6 +47,7 @@ class WorkspaceProvider extends ChangeNotifier {
       permissionSet = await repository.permissions(project.id);
       await Future.wait([
         loadDashboard(),
+        loadMembers(),
         loadActs(),
         loadCharacters(),
         loadStoryLocations(),
@@ -66,6 +68,10 @@ class WorkspaceProvider extends ChangeNotifier {
 
   Future<void> loadDashboard() async {
     dashboard = await repository.dashboard(project.id);
+  }
+
+  Future<void> loadMembers() async {
+    members = await repository.members(project.id);
   }
 
   Future<void> loadActs() async {
@@ -163,6 +169,33 @@ class WorkspaceProvider extends ChangeNotifier {
 
   Future<bool> deleteAct(Act act) {
     return _mutate(() => repository.deleteAct(project.id, act.id));
+  }
+
+  Future<bool> addMember({
+    required String email,
+    required String role,
+    String? fullName,
+  }) {
+    return _mutate(
+      () => repository.addMember(
+        project.id,
+        email: email,
+        role: role,
+        fullName: fullName,
+      ),
+    );
+  }
+
+  Future<bool> updateMember(ProjectMember member, String role) {
+    return _mutate(
+      () => repository.updateMemberRole(project.id, member.userId, role),
+    );
+  }
+
+  Future<bool> deleteMember(ProjectMember member) {
+    return _mutate(
+      () => repository.deleteMember(project.id, member.userId),
+    );
   }
 
   Future<bool> createCharacter(
@@ -532,6 +565,7 @@ class WorkspaceProvider extends ChangeNotifier {
       await action();
       await Future.wait([
         loadDashboard(),
+        loadMembers(),
         loadActs(),
         loadCharacters(),
         loadStoryLocations(),

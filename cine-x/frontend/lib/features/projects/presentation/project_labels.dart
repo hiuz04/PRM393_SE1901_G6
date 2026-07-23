@@ -28,6 +28,18 @@ String characterRoleLabel(String role) {
   };
 }
 
+String projectRoleLabel(String role) {
+  return switch (role) {
+    'OWNER' => 'Chủ dự án',
+    'SCREENWRITER' => 'Biên kịch',
+    'PRODUCER' => 'Nhà sản xuất',
+    'ASSISTANT_DIRECTOR' => 'Trợ lý đạo diễn',
+    'CREW' => 'Đoàn phim',
+    'VIEWER' => 'Chỉ xem',
+    _ => role,
+  };
+}
+
 String settingTypeLabel(String settingType) {
   return switch (settingType) {
     'INT' => 'Nội cảnh',

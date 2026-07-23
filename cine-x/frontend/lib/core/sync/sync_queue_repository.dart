@@ -17,6 +17,8 @@ class SyncQueueOperation {
     this.projectId,
     this.retryCount = 0,
     this.lastError,
+    this.createdAt,
+    this.updatedAt,
   });
 
   final String id;
@@ -29,6 +31,8 @@ class SyncQueueOperation {
   final String idempotencyKey;
   final int retryCount;
   final String? lastError;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   factory SyncQueueOperation.fromMap(Map<String, Object?> map) {
     return SyncQueueOperation(
@@ -43,7 +47,14 @@ class SyncQueueOperation {
       idempotencyKey: map['idempotency_key'] as String,
       retryCount: map['retry_count'] as int? ?? 0,
       lastError: map['last_error'] as String?,
+      createdAt: _dateTimeOrNull(map['created_at']),
+      updatedAt: _dateTimeOrNull(map['updated_at']),
     );
+  }
+
+  static DateTime? _dateTimeOrNull(Object? value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString());
   }
 
   Map<String, dynamic> toPushPayload() {
@@ -53,7 +64,7 @@ class SyncQueueOperation {
       'entityType': entityType,
       'entityId': entityId,
       'operation': operation.dbValue,
-      'baseVersion': payload['serverVersion'],
+      'baseVersion': payload['serverVersion'] ?? payload['server_version'],
       'payload': payload,
     };
   }
@@ -153,8 +164,7 @@ class SyncQueueRepository {
       }
       await executor.delete(
         'sync_queue',
-        where:
-            'entity_type = ? AND entity_id = ? AND operation IN (?, ?)',
+        where: 'entity_type = ? AND entity_id = ? AND operation IN (?, ?)',
         whereArgs: [
           entityType,
           entityId,
@@ -218,15 +228,116 @@ class SyncQueueRepository {
     });
   }
 
-  Future<List<SyncQueueOperation>> pending({int limit = 50}) async {
-    final rows = await _db.query('sync_queue', orderBy: 'created_at ASC');
+  Future<List<SyncQueueOperation>> pending({
+    int limit = 50,
+    int? projectId,
+    Set<String>? entityTypes,
+  }) async {
+    final whereParts = <String>[];
+    final whereArgs = <Object?>[];
+    if (projectId != null) {
+      whereParts.add('project_id = ?');
+      whereArgs.add(projectId.toString());
+    }
+    if (entityTypes != null && entityTypes.isNotEmpty) {
+      whereParts.add(
+        'entity_type IN (${List.filled(entityTypes.length, '?').join(', ')})',
+      );
+      whereArgs.addAll(entityTypes);
+    }
+    final rows = (await _db.query(
+      'sync_queue',
+      where: whereParts.isEmpty ? null : whereParts.join(' AND '),
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'created_at ASC',
+    ))
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
     rows.sort((a, b) {
-      final entityCompare = _entityRank(a['entity_type'] as String)
-          .compareTo(_entityRank(b['entity_type'] as String));
+      final aRank = _queueRank(
+        a['entity_type'] as String,
+        a['operation'] as String,
+      );
+      final bRank = _queueRank(
+        b['entity_type'] as String,
+        b['operation'] as String,
+      );
+      final entityCompare = aRank.compareTo(bRank);
       if (entityCompare != 0) return entityCompare;
       return (a['created_at'] as String).compareTo(b['created_at'] as String);
     });
     return rows.take(limit).map(SyncQueueOperation.fromMap).toList();
+  }
+
+  Future<List<SyncQueueOperation>> details(
+    SyncDetailKind kind, {
+    int limit = 100,
+    int? projectId,
+  }) async {
+    String where;
+    List<Object?> whereArgs;
+    String orderBy;
+    switch (kind) {
+      case SyncDetailKind.pendingCreate:
+        where = 'operation = ?';
+        whereArgs = [SyncOperationType.create.dbValue];
+        orderBy = 'created_at ASC';
+        break;
+      case SyncDetailKind.pendingUpdate:
+        where = 'operation = ?';
+        whereArgs = [SyncOperationType.update.dbValue];
+        orderBy = 'created_at ASC';
+        break;
+      case SyncDetailKind.pendingDelete:
+        where = 'operation = ?';
+        whereArgs = [SyncOperationType.delete.dbValue];
+        orderBy = 'created_at ASC';
+        break;
+      case SyncDetailKind.pendingUpload:
+        where = 'operation = ?';
+        whereArgs = [SyncOperationType.uploadFile.dbValue];
+        orderBy = 'created_at ASC';
+        break;
+      case SyncDetailKind.failed:
+        where = "last_error IS NOT NULL AND last_error <> ''";
+        whereArgs = [];
+        orderBy = 'updated_at DESC, created_at DESC';
+        break;
+      case SyncDetailKind.conflicts:
+        where = '1 = 0';
+        whereArgs = [];
+        orderBy = 'created_at ASC';
+        break;
+    }
+    if (projectId != null) {
+      where = '($where) AND project_id = ?';
+      whereArgs.add(projectId.toString());
+    }
+    final rows = (await _db.query(
+      'sync_queue',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: orderBy,
+      limit: limit,
+    ))
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    if (kind != SyncDetailKind.failed) {
+      rows.sort((a, b) {
+        final aRank = _queueRank(
+          a['entity_type'] as String,
+          a['operation'] as String,
+        );
+        final bRank = _queueRank(
+          b['entity_type'] as String,
+          b['operation'] as String,
+        );
+        final entityCompare = aRank.compareTo(bRank);
+        if (entityCompare != 0) return entityCompare;
+        return (a['created_at'] as String).compareTo(b['created_at'] as String);
+      });
+    }
+    return rows.map(SyncQueueOperation.fromMap).toList();
   }
 
   Future<void> markApplied(String operationId) async {
@@ -288,9 +399,8 @@ class SyncQueueRepository {
       lastSyncedAt: _dateTimeOrNull(
         syncState.isEmpty ? null : syncState.single['last_synced_at'],
       ),
-      lastError: syncState.isEmpty
-          ? null
-          : syncState.single['last_error'] as String?,
+      lastError:
+          syncState.isEmpty ? null : syncState.single['last_error'] as String?,
     );
   }
 
@@ -304,6 +414,7 @@ class SyncQueueRepository {
       'sync_queue',
       {
         'payload_json': jsonEncode(payload),
+        'idempotency_key': generateUuid(),
         'retry_count': 0,
         'last_error': null,
         'updated_at': now,
@@ -317,6 +428,13 @@ class SyncQueueRepository {
   int _entityRank(String entityType) {
     final index = dependencyOrder.indexOf(entityType);
     return index == -1 ? dependencyOrder.length : index;
+  }
+
+  int _queueRank(String entityType, String operation) {
+    final rank = _entityRank(entityType);
+    return operation == SyncOperationType.delete.dbValue
+        ? dependencyOrder.length - rank
+        : rank;
   }
 
   DateTime? _dateTimeOrNull(Object? value) {

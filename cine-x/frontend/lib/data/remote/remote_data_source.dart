@@ -7,6 +7,7 @@ class PushResult {
   const PushResult({
     required this.operationId,
     required this.status,
+    this.remoteId,
     this.serverVersion,
     this.serverUpdatedAt,
     this.error,
@@ -16,6 +17,7 @@ class PushResult {
 
   final String operationId;
   final String status;
+  final String? remoteId;
   final int? serverVersion;
   final DateTime? serverUpdatedAt;
   final String? error;
@@ -26,6 +28,7 @@ class PushResult {
     return PushResult(
       operationId: json['operationId'] as String,
       status: json['status'] as String,
+      remoteId: json['remoteId'] as String?,
       serverVersion: json['serverVersion'] as int?,
       serverUpdatedAt: _dateTimeOrNull(json['serverUpdatedAt']),
       error: json['error'] as String?,

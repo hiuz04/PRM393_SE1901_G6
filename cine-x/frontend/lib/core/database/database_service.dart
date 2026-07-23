@@ -11,7 +11,7 @@ class DatabaseService {
   DatabaseService._();
 
   static final DatabaseService instance = DatabaseService._();
-  static const databaseVersion = 6;
+  static const databaseVersion = 7;
 
   Database? _database;
 
@@ -522,6 +522,55 @@ class DatabaseService {
     await txn.execute(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_file_assets_local_uuid '
       'ON file_assets(local_uuid) WHERE local_uuid IS NOT NULL',
+    );
+    await _discardUnsupportedServerSyncRows(txn);
+  }
+
+  Future<void> _discardUnsupportedServerSyncRows(Transaction txn) async {
+    const supportedEntityTypes = [
+      'PROJECT',
+      'PROJECT_MEMBER',
+      'ACT',
+      'CHARACTER',
+      'STORY_LOCATION',
+      'SCENE',
+    ];
+    final placeholders =
+        List.filled(supportedEntityTypes.length, '?').join(', ');
+    await txn.delete(
+      'sync_queue',
+      where: 'entity_type NOT IN ($placeholders)',
+      whereArgs: supportedEntityTypes,
+    );
+    await txn.delete(
+      'sync_conflicts',
+      where: 'entity_type NOT IN ($placeholders)',
+      whereArgs: supportedEntityTypes,
+    );
+
+    const localOnlyTables = [
+      'shooting_locations',
+      'film_resources',
+      'scene_characters',
+      'scene_resources',
+      'shooting_days',
+      'shooting_day_scenes',
+      'file_assets',
+    ];
+    for (final table in localOnlyTables) {
+      await txn.update(
+        table,
+        {
+          'sync_status': 'LOCAL_ONLY',
+          'sync_error': null,
+        },
+        where: "sync_status <> 'LOCAL_ONLY'",
+      );
+    }
+    await txn.update(
+      'file_assets',
+      {'upload_status': 'LOCAL_ONLY'},
+      where: "upload_status <> 'LOCAL_ONLY'",
     );
   }
 

@@ -18,6 +18,15 @@ import '../services/production_schedule_optimizer.dart';
 import '../services/schedule_conflict_service.dart';
 
 class CineXRepository {
+  static const _serverSyncEntityTypes = {
+    'PROJECT',
+    'PROJECT_MEMBER',
+    'ACT',
+    'CHARACTER',
+    'STORY_LOCATION',
+    'SCENE',
+  };
+
   CineXRepository(
     Database db,
     SessionStorage sessionStorage,
@@ -80,14 +89,16 @@ class CineXRepository {
   }) async {
     final mode = await _usageMode();
     final accountId = await _accountId();
+    final syncToServer = _serverSyncEntityTypes.contains(entityType);
     final localUuid = await _localDataSource.markCreated(
       executor,
       table: table,
       id: id,
       mode: mode,
       accountId: accountId,
+      syncToServer: syncToServer,
     );
-    if (mode == AppUsageMode.offlineGuest) return;
+    if (mode == AppUsageMode.offlineGuest || !syncToServer) return;
     await _syncQueueRepository.enqueueWithExecutor(
       executor,
       entityType: entityType,
@@ -114,14 +125,16 @@ class CineXRepository {
   }) async {
     final mode = await _usageMode();
     final accountId = await _accountId();
+    final syncToServer = _serverSyncEntityTypes.contains(entityType);
     final localUuid = await _localDataSource.markUpdated(
       executor,
       table: table,
       id: id,
       mode: mode,
       accountId: accountId,
+      syncToServer: syncToServer,
     );
-    if (mode == AppUsageMode.offlineGuest) return;
+    if (mode == AppUsageMode.offlineGuest || !syncToServer) return;
     await _syncQueueRepository.enqueueWithExecutor(
       executor,
       entityType: entityType,
@@ -148,14 +161,16 @@ class CineXRepository {
   }) async {
     final mode = await _usageMode();
     final accountId = await _accountId();
+    final syncToServer = _serverSyncEntityTypes.contains(entityType);
     final localUuid = await _localDataSource.markDeleted(
       executor,
       table: table,
       id: id,
       mode: mode,
       accountId: accountId,
+      syncToServer: syncToServer,
     );
-    if (mode == AppUsageMode.offlineGuest) return;
+    if (mode == AppUsageMode.offlineGuest || !syncToServer) return;
     await _syncQueueRepository.enqueueWithExecutor(
       executor,
       entityType: entityType,
@@ -192,9 +207,7 @@ class CineXRepository {
       'local_path': localPath,
       'remote_url': null,
       'checksum': null,
-      'upload_status': mode == AppUsageMode.offlineGuest
-          ? EntitySyncStatus.localOnly.dbValue
-          : EntitySyncStatus.pendingCreate.dbValue,
+      'upload_status': EntitySyncStatus.localOnly.dbValue,
       'mime_type': null,
       'file_size': fileSize,
       'created_at': now,
@@ -203,34 +216,170 @@ class CineXRepository {
       'workspace_type':
           mode == AppUsageMode.offlineGuest ? 'LOCAL_GUEST' : 'CLOUD_ACCOUNT',
       'owner_account_id': mode == AppUsageMode.offlineGuest ? null : accountId,
-      'sync_status': mode == AppUsageMode.offlineGuest
-          ? EntitySyncStatus.localOnly.dbValue
-          : EntitySyncStatus.pendingCreate.dbValue,
+      'sync_status': EntitySyncStatus.localOnly.dbValue,
       'local_version': 1,
     });
-    if (mode == AppUsageMode.offlineGuest) return;
-    await _syncQueueRepository.enqueueWithExecutor(
-      executor,
-      entityType: 'FILE_ASSET',
-      entityId: localUuid,
-      operation: SyncOperationType.uploadFile,
-      payload: {
-        'assetId': localUuid,
-        'projectId': projectId,
-        'entityTable': entityTable,
-        'entityId': entityId,
-        'fileSize': fileSize,
-      },
-      accountId: accountId,
-      projectId: projectId,
-      dependencyGroup: 'project:$projectId',
-    );
   }
 
   Future<Set<ProjectPermission>> permissions(int projectId) async {
     return _permissionService.permissionsForUser(
       projectId,
       await _currentUserId(),
+    );
+  }
+
+  Future<List<ProjectMember>> members(int projectId) async {
+    final userId = await _currentUserId();
+    if (await _count(
+          'project_members',
+          'project_id = ? AND user_id = ? AND deleted_at IS NULL',
+          [projectId, userId],
+        ) ==
+        0) {
+      throw Exception('Bạn không thuộc dự án này.');
+    }
+    final rows = await _db.rawQuery('''
+      SELECT pm.*, u.full_name, u.email
+      FROM project_members pm
+      JOIN users u ON u.id = pm.user_id
+      WHERE pm.project_id = ? AND pm.deleted_at IS NULL
+      ORDER BY
+        CASE pm.role
+          WHEN 'OWNER' THEN 0
+          WHEN 'SCREENWRITER' THEN 1
+          WHEN 'PRODUCER' THEN 2
+          WHEN 'ASSISTANT_DIRECTOR' THEN 3
+          WHEN 'CREW' THEN 4
+          ELSE 5
+        END,
+        u.full_name COLLATE NOCASE ASC
+    ''', [projectId]);
+    return rows.map(ProjectMember.fromMap).toList();
+  }
+
+  Future<ProjectMember> addMember(
+    int projectId, {
+    required String email,
+    required String role,
+    String? fullName,
+  }) async {
+    await _require(projectId, ProjectPermission.manageMembers);
+    final normalizedEmail = _normalizeEmail(email);
+    final normalizedRole = _normalizeMemberRole(role, creating: true);
+    late final int userId;
+    await _db.transaction((txn) async {
+      userId = await _ensureLocalUser(
+        txn,
+        email: normalizedEmail,
+        fullName: _emptyToNull(fullName) ?? normalizedEmail,
+      );
+      final existing = await txn.query(
+        'project_members',
+        columns: ['user_id', 'deleted_at'],
+        where: 'project_id = ? AND user_id = ?',
+        whereArgs: [projectId, userId],
+        limit: 1,
+      );
+      final now = DateTime.now().toIso8601String();
+      final localUuid = existing.isEmpty
+          ? generateUuid()
+          : await _ensureMemberLocalUuid(txn, projectId, userId);
+      if (existing.isEmpty) {
+        await txn.insert('project_members', {
+          'project_id': projectId,
+          'user_id': userId,
+          'role': normalizedRole,
+          'local_uuid': localUuid,
+          'created_at': now,
+          'updated_at': now,
+        });
+      } else if (existing.single['deleted_at'] == null) {
+        throw Exception('Người dùng đã là thành viên dự án.');
+      } else {
+        await txn.update(
+          'project_members',
+          {
+            'role': normalizedRole,
+            'deleted_at': null,
+            'updated_at': now,
+          },
+          where: 'project_id = ? AND user_id = ?',
+          whereArgs: [projectId, userId],
+        );
+      }
+      await _markMemberChanged(
+        txn,
+        projectId: projectId,
+        userId: userId,
+        operation: SyncOperationType.create,
+      );
+    });
+    return _memberByUser(projectId, userId);
+  }
+
+  Future<ProjectMember> updateMemberRole(
+    int projectId,
+    int userId,
+    String role,
+  ) async {
+    await _require(projectId, ProjectPermission.manageMembers);
+    final normalizedRole = _normalizeMemberRole(role);
+    final current = await _memberByUser(projectId, userId);
+    if (current.role == 'OWNER' &&
+        normalizedRole != 'OWNER' &&
+        await _ownerCount(projectId) <= 1) {
+      throw Exception('Không thể hạ quyền OWNER cuối cùng.');
+    }
+    await _db.transaction((txn) async {
+      await txn.update(
+        'project_members',
+        {
+          'role': normalizedRole,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'project_id = ? AND user_id = ?',
+        whereArgs: [projectId, userId],
+      );
+      await _markMemberChanged(
+        txn,
+        projectId: projectId,
+        userId: userId,
+        operation: SyncOperationType.update,
+      );
+    });
+    return _memberByUser(projectId, userId);
+  }
+
+  Future<void> deleteMember(int projectId, int userId) async {
+    await _require(projectId, ProjectPermission.manageMembers);
+    final current = await _memberByUser(projectId, userId);
+    if (current.role == 'OWNER' && await _ownerCount(projectId) <= 1) {
+      throw Exception('Không thể xóa OWNER cuối cùng.');
+    }
+    if (await _isOnlineAccount()) {
+      await _db.transaction((txn) async {
+        await txn.update(
+          'project_members',
+          {
+            'deleted_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'project_id = ? AND user_id = ?',
+          whereArgs: [projectId, userId],
+        );
+        await _markMemberChanged(
+          txn,
+          projectId: projectId,
+          userId: userId,
+          operation: SyncOperationType.delete,
+        );
+      });
+      return;
+    }
+    await _db.delete(
+      'project_members',
+      where: 'project_id = ? AND user_id = ?',
+      whereArgs: [projectId, userId],
     );
   }
 
@@ -2114,6 +2263,187 @@ class CineXRepository {
       resources: await resources(projectId),
       shootingDays: await shootingDays(projectId),
     );
+  }
+
+  Future<ProjectMember> _memberByUser(int projectId, int userId) async {
+    final rows = await _db.rawQuery('''
+      SELECT pm.*, u.full_name, u.email
+      FROM project_members pm
+      JOIN users u ON u.id = pm.user_id
+      WHERE pm.project_id = ? AND pm.user_id = ?
+      LIMIT 1
+    ''', [projectId, userId]);
+    if (rows.isEmpty || rows.single['deleted_at'] != null) {
+      throw Exception('Không tìm thấy thành viên dự án.');
+    }
+    return ProjectMember.fromMap(rows.single);
+  }
+
+  Future<int> _ownerCount(int projectId) async {
+    return Sqflite.firstIntValue(await _db.rawQuery(
+          '''
+          SELECT COUNT(*)
+          FROM project_members
+          WHERE project_id = ? AND role = 'OWNER' AND deleted_at IS NULL
+          ''',
+          [projectId],
+        )) ??
+        0;
+  }
+
+  String _normalizeEmail(String email) {
+    final normalized = email.trim().toLowerCase();
+    final valid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized);
+    if (!valid) throw Exception('Email thành viên không hợp lệ.');
+    return normalized;
+  }
+
+  String _normalizeMemberRole(String role, {bool creating = false}) {
+    final normalized = role.trim().toUpperCase();
+    const roles = {
+      'OWNER',
+      'SCREENWRITER',
+      'PRODUCER',
+      'ASSISTANT_DIRECTOR',
+      'CREW',
+      'VIEWER',
+    };
+    if (!roles.contains(normalized)) {
+      throw Exception('Vai trò thành viên không hợp lệ.');
+    }
+    if (creating && normalized == 'OWNER') {
+      throw Exception('Không thêm OWNER bằng màn thành viên.');
+    }
+    return normalized;
+  }
+
+  Future<int> _ensureLocalUser(
+    DatabaseExecutor executor, {
+    required String email,
+    required String fullName,
+  }) async {
+    final rows = await executor.query(
+      'users',
+      columns: ['id'],
+      where: 'email = ? COLLATE NOCASE',
+      whereArgs: [email],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) return rows.single['id'] as int;
+    return executor.insert('users', {
+      'full_name': fullName.trim().isEmpty ? email : fullName.trim(),
+      'email': email,
+      'password_hash': 'invited-member',
+      'is_active': 1,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<String> _ensureMemberLocalUuid(
+    DatabaseExecutor executor,
+    int projectId,
+    int userId,
+  ) async {
+    final rows = await executor.query(
+      'project_members',
+      columns: ['local_uuid'],
+      where: 'project_id = ? AND user_id = ?',
+      whereArgs: [projectId, userId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw Exception('Không tìm thấy thành viên để ghi metadata đồng bộ.');
+    }
+    final existing = rows.single['local_uuid'] as String?;
+    if (existing != null && existing.isNotEmpty) return existing;
+    final localUuid = generateUuid();
+    await executor.update(
+      'project_members',
+      {'local_uuid': localUuid},
+      where: 'project_id = ? AND user_id = ?',
+      whereArgs: [projectId, userId],
+    );
+    return localUuid;
+  }
+
+  Future<void> _markMemberChanged(
+    DatabaseExecutor executor, {
+    required int projectId,
+    required int userId,
+    required SyncOperationType operation,
+  }) async {
+    final mode = await _usageMode();
+    final accountId = await _accountId();
+    final localUuid = await _ensureMemberLocalUuid(executor, projectId, userId);
+    final rows = await executor.query(
+      'project_members',
+      columns: ['sync_status', 'local_version'],
+      where: 'project_id = ? AND user_id = ?',
+      whereArgs: [projectId, userId],
+      limit: 1,
+    );
+    final currentStatus = EntitySyncStatusCodec.fromDb(
+      rows.isEmpty ? null : rows.single['sync_status'] as String?,
+    );
+    final currentVersion =
+        rows.isEmpty ? 0 : rows.single['local_version'] as int? ?? 0;
+    final nextStatus = mode == AppUsageMode.offlineGuest
+        ? EntitySyncStatus.localOnly
+        : switch (operation) {
+            SyncOperationType.create => EntitySyncStatus.pendingCreate,
+            SyncOperationType.update =>
+              currentStatus == EntitySyncStatus.pendingCreate
+                  ? EntitySyncStatus.pendingCreate
+                  : EntitySyncStatus.pendingUpdate,
+            SyncOperationType.delete => EntitySyncStatus.pendingDelete,
+            SyncOperationType.uploadFile => EntitySyncStatus.pendingUpdate,
+          };
+    await executor.update(
+      'project_members',
+      {
+        'workspace_type':
+            mode == AppUsageMode.offlineGuest ? 'LOCAL_GUEST' : 'CLOUD_ACCOUNT',
+        'owner_account_id': mode == AppUsageMode.offlineGuest ? null : accountId,
+        'sync_status': nextStatus.dbValue,
+        'local_version': currentVersion + 1,
+        'sync_error': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'project_id = ? AND user_id = ?',
+      whereArgs: [projectId, userId],
+    );
+    if (mode == AppUsageMode.offlineGuest) return;
+    await _syncQueueRepository.enqueueWithExecutor(
+      executor,
+      entityType: 'PROJECT_MEMBER',
+      entityId: localUuid,
+      operation: operation,
+      payload: await _projectMemberSyncPayload(
+        executor,
+        projectId: projectId,
+        userId: userId,
+      ),
+      accountId: accountId,
+      projectId: projectId,
+      dependencyGroup: 'project:$projectId',
+    );
+  }
+
+  Future<Map<String, Object?>> _projectMemberSyncPayload(
+    DatabaseExecutor executor, {
+    required int projectId,
+    required int userId,
+  }) async {
+    final rows = await executor.rawQuery('''
+      SELECT pm.*, p.local_uuid AS project_client_uuid, u.full_name, u.email
+      FROM project_members pm
+      JOIN projects p ON p.id = pm.project_id
+      JOIN users u ON u.id = pm.user_id
+      WHERE pm.project_id = ? AND pm.user_id = ?
+      LIMIT 1
+    ''', [projectId, userId]);
+    if (rows.isEmpty) return const {};
+    return Map<String, Object?>.from(rows.single);
   }
 
   Map<String, Object?> _characterPayload(

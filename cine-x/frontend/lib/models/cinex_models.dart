@@ -230,6 +230,8 @@ class ProjectMember {
     required this.role,
     this.fullName,
     this.email,
+    this.localUuid,
+    this.joinedAt,
   });
 
   final int projectId;
@@ -237,6 +239,8 @@ class ProjectMember {
   final String role;
   final String? fullName;
   final String? email;
+  final String? localUuid;
+  final DateTime? joinedAt;
 
   factory ProjectMember.fromMap(Map<String, Object?> map) => ProjectMember(
         projectId: map['project_id'] as int,
@@ -244,6 +248,17 @@ class ProjectMember {
         role: map['role'] as String,
         fullName: _stringOrNull(map['full_name']),
         email: _stringOrNull(map['email']),
+        localUuid: _stringOrNull(map['local_uuid']),
+        joinedAt: _dateTimeOrNull(map['joined_at'] ?? map['created_at']),
+      );
+
+  factory ProjectMember.fromJson(Map<String, dynamic> json) => ProjectMember(
+        projectId: json['projectId'] as int? ?? 0,
+        userId: json['userId'] as int,
+        role: json['role'] as String? ?? 'VIEWER',
+        fullName: json['displayName'] as String? ?? json['fullName'] as String?,
+        email: json['email'] as String?,
+        joinedAt: _dateTimeOrNull(json['joinedAt']),
       );
 }
 

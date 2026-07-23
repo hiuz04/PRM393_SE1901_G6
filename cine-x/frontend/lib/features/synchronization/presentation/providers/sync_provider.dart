@@ -25,6 +25,18 @@ class SyncProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<List<SyncDetailItem>> details(SyncDetailKind kind) async {
+    final coordinator = _coordinator;
+    if (coordinator == null) return const [];
+    return coordinator.details(kind);
+  }
+
+  Future<List<SyncProjectOption>> localProjects() async {
+    final coordinator = _coordinator;
+    if (coordinator == null) return const [];
+    return coordinator.localProjects();
+  }
+
   Future<bool> syncNow() async {
     final coordinator = _coordinator;
     if (coordinator == null || loading) return false;
@@ -33,6 +45,26 @@ class SyncProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await coordinator.syncNow();
+      summary = await coordinator.summary();
+      return true;
+    } catch (ex) {
+      error = ex.toString().replaceFirst('Exception: ', '');
+      summary = await coordinator.summary();
+      return false;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> syncProject(int projectId) async {
+    final coordinator = _coordinator;
+    if (coordinator == null || loading) return false;
+    loading = true;
+    error = null;
+    notifyListeners();
+    try {
+      await coordinator.syncProjectToServer(projectId);
       summary = await coordinator.summary();
       return true;
     } catch (ex) {
