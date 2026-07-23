@@ -502,9 +502,16 @@ class CineXRepository {
     final title = body['title']?.toString().trim() ?? '';
     final titleError = ActValidators.title(title);
     if (titleError != null) throw Exception(titleError);
+    final maxOrder = Sqflite.firstIntValue(await _db.rawQuery(
+          'SELECT COALESCE(MAX(sequence_order), 0) FROM acts '
+          'WHERE project_id = ? AND deleted_at IS NULL',
+          [projectId],
+        )) ??
+        0;
     final order =
-        body['sequenceOrder'] as int? ?? body['sequence_order'] as int?;
-    if (order == null || order <= 0) {
+        _intOrNull(body['sequenceOrder'] ?? body['sequence_order']) ??
+            maxOrder + 1;
+    if (order <= 0) {
       throw Exception('Thứ tự phải lớn hơn 0.');
     }
     if (await _count(
@@ -536,18 +543,126 @@ class CineXRepository {
     return Act.fromMap(rows.single);
   }
 
+  Future<Act> updateAct(
+    int projectId,
+    int actId,
+    Map<String, dynamic> body,
+  ) async {
+    await _require(projectId, ProjectPermission.manageStory);
+    await _ensureRowInProject(
+      table: 'acts',
+      id: actId,
+      projectId: projectId,
+      label: 'hoi',
+    );
+    final title = body['title']?.toString().trim() ?? '';
+    final titleError = ActValidators.title(title);
+    if (titleError != null) throw Exception(titleError);
+    final order =
+        body['sequenceOrder'] as int? ?? body['sequence_order'] as int?;
+    if (order == null || order <= 0) {
+      throw Exception('Thu tu phai lon hon 0.');
+    }
+    final rows = await _db.query(
+      'acts',
+      where: 'project_id = ? AND deleted_at IS NULL',
+      whereArgs: [projectId],
+      orderBy: 'sequence_order ASC, id ASC',
+    );
+    final ordered = rows.map((row) => Map<String, Object?>.from(row)).toList();
+    final currentIndex = ordered.indexWhere((row) => row['id'] == actId);
+    if (currentIndex < 0) {
+      throw Exception('Khong tim thay hoi can xu ly.');
+    }
+    final current = ordered.removeAt(currentIndex);
+    current['title'] = title;
+    current['description'] = _emptyToNull(body['description']);
+    final targetIndex =
+        order <= 1 ? 0 : order > ordered.length + 1 ? ordered.length : order - 1;
+    ordered.insert(targetIndex, current);
+    final previousOrder = {
+      for (final row in rows) row['id'] as int: row['sequence_order'] as int,
+    };
+    final affectedIds = <int>{actId};
+    for (var index = 0; index < ordered.length; index++) {
+      final id = ordered[index]['id'] as int;
+      if (previousOrder[id] != index + 1) affectedIds.add(id);
+    }
+    await _db.transaction((txn) async {
+      for (var index = 0; index < ordered.length; index++) {
+        await txn.update(
+          'acts',
+          {'sequence_order': -(index + 1)},
+          where: 'id = ? AND project_id = ?',
+          whereArgs: [ordered[index]['id'], projectId],
+        );
+      }
+      for (var index = 0; index < ordered.length; index++) {
+        final row = ordered[index];
+        await txn.update(
+          'acts',
+          {
+            'title': row['title'],
+            'description': row['description'],
+            'sequence_order': index + 1,
+          },
+          where: 'id = ? AND project_id = ?',
+          whereArgs: [row['id'], projectId],
+        );
+      }
+      for (final id in affectedIds) {
+        await _recordUpdate(
+          txn,
+          table: 'acts',
+          entityType: 'ACT',
+          id: id,
+          projectId: projectId,
+          dependencyGroup: 'project:$projectId',
+        );
+      }
+    });
+    final updatedRows =
+        await _db.query('acts', where: 'id = ?', whereArgs: [actId]);
+    return Act.fromMap(updatedRows.single);
+  }
+
   Future<void> deleteAct(int projectId, int actId) async {
     await _require(projectId, ProjectPermission.manageStory);
-    final sceneCount = await _count(
-      'scenes',
-      'act_id = ? AND deleted_at IS NULL',
-      [actId],
+    await _ensureRowInProject(
+      table: 'acts',
+      id: actId,
+      projectId: projectId,
+      label: 'hoi',
     );
-    if (sceneCount > 0) {
-      throw Exception('Hãy xóa cảnh trước khi xóa hồi này.');
-    }
+    final sceneRows = await _db.query(
+      'scenes',
+      columns: ['id'],
+      where: 'act_id = ? AND project_id = ? AND deleted_at IS NULL',
+      whereArgs: [actId, projectId],
+    );
+    final sceneIds = sceneRows.map((row) => row['id'] as int).toList();
     if (await _isOnlineAccount()) {
       await _db.transaction((txn) async {
+        await _deleteSceneLinksForIds(txn, sceneIds);
+        for (final sceneId in sceneIds) {
+          await txn.update(
+            'scenes',
+            {
+              'deleted_at': DateTime.now().toIso8601String(),
+              'updated_at': DateTime.now().toIso8601String(),
+            },
+            where: 'id = ? AND project_id = ?',
+            whereArgs: [sceneId, projectId],
+          );
+          await _recordDelete(
+            txn,
+            table: 'scenes',
+            entityType: 'SCENE',
+            id: sceneId,
+            projectId: projectId,
+            dependencyGroup: 'project:$projectId',
+          );
+        }
         await _recordDelete(
           txn,
           table: 'acts',
@@ -559,7 +674,22 @@ class CineXRepository {
       });
       return;
     }
-    await _db.delete('acts', where: 'id = ?', whereArgs: [actId]);
+    await _db.transaction((txn) async {
+      if (sceneIds.isNotEmpty) {
+        await _deleteSceneLinksForIds(txn, sceneIds);
+        final marks = List.filled(sceneIds.length, '?').join(',');
+        await txn.delete(
+          'scenes',
+          where: 'id IN ($marks) AND project_id = ?',
+          whereArgs: [...sceneIds, projectId],
+        );
+      }
+      await txn.delete(
+        'acts',
+        where: 'id = ? AND project_id = ?',
+        whereArgs: [actId, projectId],
+      );
+    });
   }
 
   Future<List<StoryCharacter>> characters(
@@ -664,6 +794,7 @@ class CineXRepository {
     XFile file,
   ) async {
     await _require(projectId, ProjectPermission.manageCharacters);
+    await _ensureCharacterInProject(projectId, characterId);
     final character = await characterById(characterId);
     String? imagePath;
     try {
@@ -678,8 +809,8 @@ class CineXRepository {
             'image_path': imagePath,
             'updated_at': DateTime.now().toIso8601String(),
           },
-          where: 'id = ?',
-          whereArgs: [characterId],
+          where: 'id = ? AND project_id = ?',
+          whereArgs: [characterId, projectId],
         );
         await _recordFileUpload(
           txn,
@@ -712,24 +843,49 @@ class CineXRepository {
 
   Future<void> deleteCharacter(int projectId, int characterId) async {
     await _require(projectId, ProjectPermission.manageCharacters);
-    final used = await _count(
-      'scene_characters',
-      'character_id = ?',
-      [characterId],
-    );
-    if (used > 0) {
-      await archiveCharacter(projectId, characterId);
-      return;
-    }
-    if (await _isOnlineAccount()) {
-      await archiveCharacter(projectId, characterId);
-      return;
-    }
-    await _db.delete('characters', where: 'id = ?', whereArgs: [characterId]);
+    await _ensureCharacterInProject(projectId, characterId);
+    await _db.transaction((txn) async {
+      await txn.delete(
+        'scene_characters',
+        where: 'character_id = ?',
+        whereArgs: [characterId],
+      );
+      if (await _isOnlineAccount()) {
+        await txn.update(
+          'characters',
+          {
+            'is_archived': 1,
+            'deleted_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ? AND project_id = ?',
+          whereArgs: [characterId, projectId],
+        );
+        await _recordDelete(
+          txn,
+          table: 'characters',
+          entityType: 'CHARACTER',
+          id: characterId,
+          projectId: projectId,
+          dependencyGroup: 'project:$projectId',
+        );
+      } else {
+        await txn.delete(
+          'characters',
+          where: 'id = ? AND project_id = ?',
+          whereArgs: [characterId, projectId],
+        );
+      }
+    });
   }
 
   Future<void> archiveCharacter(int projectId, int characterId) async {
     await _require(projectId, ProjectPermission.manageCharacters);
+    await _ensureCharacterInProject(
+      projectId,
+      characterId,
+      includeArchived: true,
+    );
     await _db.transaction((txn) async {
       await txn.update(
         'characters',
@@ -1271,7 +1427,7 @@ class CineXRepository {
         .map((item) => item as int)
         .toList();
     final resourceEntries = _resourceEntries(body['resourceRequirements']);
-    await _validateSceneWrite(projectId, payload, resourceEntries);
+    await _validateSceneWrite(projectId, payload, characterIds, resourceEntries);
     late final int id;
     await _db.transaction((txn) async {
       id = await txn.insert('scenes', payload);
@@ -1302,12 +1458,17 @@ class CineXRepository {
     await _validateSceneWrite(
       projectId,
       payload,
+      characterIds,
       resourceEntries,
       sceneId: sceneId,
     );
     await _db.transaction((txn) async {
-      await txn
-          .update('scenes', payload, where: 'id = ?', whereArgs: [sceneId]);
+      await txn.update(
+        'scenes',
+        payload,
+        where: 'id = ? AND project_id = ?',
+        whereArgs: [sceneId, projectId],
+      );
       await _replaceSceneLinks(txn, sceneId, characterIds, resourceEntries);
       await _recordUpdate(
         txn,
@@ -1327,10 +1488,17 @@ class CineXRepository {
     String status,
   ) async {
     await _require(projectId, ProjectPermission.manageStory);
+    await _ensureSceneInProject(projectId, sceneId);
     final values = <String, Object?>{
       'updated_at': DateTime.now().toIso8601String(),
     };
     if (SceneValidators.writingStatuses.contains(status)) {
+      if (status == 'DONE') {
+        final scene = await sceneById(sceneId);
+        if (scene.summary.trim().isEmpty) {
+          throw Exception('Cần nhập tóm tắt trước khi hoàn tất cảnh.');
+        }
+      }
       values['writing_status'] = status;
     } else if (SceneValidators.productionStatuses.contains(status)) {
       final scene = await sceneById(sceneId);
@@ -1343,7 +1511,12 @@ class CineXRepository {
       throw Exception('Trạng thái cảnh không hợp lệ.');
     }
     await _db.transaction((txn) async {
-      await txn.update('scenes', values, where: 'id = ?', whereArgs: [sceneId]);
+      await txn.update(
+        'scenes',
+        values,
+        where: 'id = ? AND project_id = ?',
+        whereArgs: [sceneId, projectId],
+      );
       await _recordUpdate(
         txn,
         table: 'scenes',
@@ -1358,25 +1531,18 @@ class CineXRepository {
 
   Future<void> deleteScene(int projectId, int sceneId) async {
     await _require(projectId, ProjectPermission.manageStory);
-    final scheduled = await _count(
-      'shooting_day_scenes',
-      'scene_id = ?',
-      [sceneId],
-    );
-    if (scheduled > 0) {
-      await updateSceneStatus(projectId, sceneId, 'CANCELLED');
-      return;
-    }
+    await _ensureSceneInProject(projectId, sceneId);
     if (await _isOnlineAccount()) {
       await _db.transaction((txn) async {
+        await _deleteSceneLinksForIds(txn, [sceneId]);
         await txn.update(
           'scenes',
           {
             'deleted_at': DateTime.now().toIso8601String(),
             'updated_at': DateTime.now().toIso8601String(),
           },
-          where: 'id = ?',
-          whereArgs: [sceneId],
+          where: 'id = ? AND project_id = ?',
+          whereArgs: [sceneId, projectId],
         );
         await _recordDelete(
           txn,
@@ -1389,20 +1555,26 @@ class CineXRepository {
       });
       return;
     }
-    await _db.delete('scenes', where: 'id = ?', whereArgs: [sceneId]);
+    await _db.transaction((txn) async {
+      await _deleteSceneLinksForIds(txn, [sceneId]);
+      await txn.delete(
+        'scenes',
+        where: 'id = ? AND project_id = ?',
+        whereArgs: [sceneId, projectId],
+      );
+    });
   }
 
   Future<List<PlannerGroup>> planner(int projectId) async {
     final allScenes = await scenes(projectId);
-    final groups = <String, List<Scene>>{};
+    final groups = <int, List<Scene>>{};
     for (final scene in allScenes) {
-      final key = scene.plannedShootingLocationName ?? 'Chưa gán';
-      groups.putIfAbsent(key, () => []).add(scene);
+      groups.putIfAbsent(scene.storyLocationId, () => []).add(scene);
     }
-    return groups.entries
+    final result = groups.entries
         .map(
           (entry) => PlannerGroup(
-            locationName: entry.key,
+            locationName: entry.value.first.storyLocationName,
             sceneCount: entry.value.length,
             totalEstimatedMinutes: entry.value.fold(
               0,
@@ -1412,6 +1584,8 @@ class CineXRepository {
           ),
         )
         .toList();
+    result.sort((a, b) => a.locationName.compareTo(b.locationName));
+    return result;
   }
 
   Future<AnalyticsSummary> analyticsSummary(int projectId) async {
@@ -1420,9 +1594,12 @@ class CineXRepository {
 
   Future<List<CharacterFrequency>> characterFrequency(int projectId) async {
     final rows = await _db.rawQuery('''
-      SELECT c.id AS character_id, c.name, COUNT(sc.scene_id) AS scene_count
+      SELECT c.id AS character_id, c.name, COUNT(s.id) AS scene_count
       FROM characters c
       LEFT JOIN scene_characters sc ON sc.character_id = c.id
+      LEFT JOIN scenes s ON s.id = sc.scene_id
+        AND s.project_id = c.project_id
+        AND s.deleted_at IS NULL
       WHERE c.project_id = ? AND c.is_archived = 0 AND c.deleted_at IS NULL
       GROUP BY c.id, c.name
       ORDER BY scene_count DESC, c.name COLLATE NOCASE ASC
@@ -2135,9 +2312,14 @@ class CineXRepository {
   Future<void> _validateSceneWrite(
     int projectId,
     Map<String, Object?> payload,
+    List<int> characterIds,
     List<Map<String, Object?>> resourceEntries, {
     int? sceneId,
   }) async {
+    if (sceneId != null) {
+      await _ensureSceneInProject(projectId, sceneId);
+    }
+
     final actId = payload['act_id'] as int?;
     if (actId == null ||
         await _count(
@@ -2173,9 +2355,21 @@ class CineXRepository {
       throw Exception('Số cảnh đã tồn tại trong dự án.');
     }
 
+    final uniqueCharacters = characterIds.toSet();
+    if (uniqueCharacters.length != characterIds.length) {
+      throw Exception('Khong them cung mot nhan vat hai lan.');
+    }
+    for (final characterId in uniqueCharacters) {
+      await _ensureCharacterInProject(projectId, characterId);
+    }
+
     final writingStatus = payload['writing_status']?.toString();
     if (!SceneValidators.writingStatuses.contains(writingStatus)) {
       throw Exception('Trạng thái viết không hợp lệ.');
+    }
+    if (writingStatus == 'DONE' &&
+        (payload['summary']?.toString().trim().isEmpty ?? true)) {
+      throw Exception('Cần nhập tóm tắt trước khi hoàn tất cảnh.');
     }
     final productionStatus = payload['production_status']?.toString();
     if (!SceneValidators.productionStatuses.contains(productionStatus)) {
@@ -2268,6 +2462,29 @@ class CineXRepository {
     }
   }
 
+  Future<void> _deleteSceneLinksForIds(
+    Transaction txn,
+    List<int> sceneIds,
+  ) async {
+    if (sceneIds.isEmpty) return;
+    final marks = List.filled(sceneIds.length, '?').join(',');
+    await txn.delete(
+      'shooting_day_scenes',
+      where: 'scene_id IN ($marks)',
+      whereArgs: sceneIds,
+    );
+    await txn.delete(
+      'scene_characters',
+      where: 'scene_id IN ($marks)',
+      whereArgs: sceneIds,
+    );
+    await txn.delete(
+      'scene_resources',
+      where: 'scene_id IN ($marks)',
+      whereArgs: sceneIds,
+    );
+  }
+
   List<Map<String, Object?>> _resourceEntries(Object? raw) {
     if (raw is! List) return const [];
     return raw
@@ -2288,6 +2505,8 @@ class CineXRepository {
       FROM characters c
       JOIN scene_characters sc ON sc.character_id = c.id
       WHERE sc.scene_id = ?
+        AND c.is_archived = 0
+        AND c.deleted_at IS NULL
       ORDER BY c.name COLLATE NOCASE ASC
     ''', [sceneId]);
     return rows.map(SceneCharacter.fromMap).toList();
@@ -2351,6 +2570,48 @@ class CineXRepository {
       await _db.rawQuery('SELECT COUNT(*) FROM $table WHERE $where', args),
     );
     return value ?? 0;
+  }
+
+  Future<void> _ensureRowInProject({
+    required String table,
+    required int id,
+    required int projectId,
+    required String label,
+    bool includeDeleted = false,
+    String? activeWhere,
+  }) async {
+    var where = 'id = ? AND project_id = ?';
+    final args = <Object?>[id, projectId];
+    if (!includeDeleted) where += ' AND deleted_at IS NULL';
+    if (activeWhere != null && activeWhere.isNotEmpty) {
+      where += ' AND ($activeWhere)';
+    }
+    if (await _count(table, where, args) == 0) {
+      throw Exception('Khong tim thay $label trong du an nay.');
+    }
+  }
+
+  Future<void> _ensureCharacterInProject(
+    int projectId,
+    int characterId, {
+    bool includeArchived = false,
+  }) {
+    return _ensureRowInProject(
+      table: 'characters',
+      id: characterId,
+      projectId: projectId,
+      label: 'nhan vat',
+      activeWhere: includeArchived ? null : 'is_archived = 0',
+    );
+  }
+
+  Future<void> _ensureSceneInProject(int projectId, int sceneId) {
+    return _ensureRowInProject(
+      table: 'scenes',
+      id: sceneId,
+      projectId: projectId,
+      label: 'canh',
+    );
   }
 
   Future<double> _projectProgress(int projectId) async {

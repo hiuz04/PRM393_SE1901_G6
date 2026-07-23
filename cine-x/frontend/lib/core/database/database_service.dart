@@ -11,7 +11,7 @@ class DatabaseService {
   DatabaseService._();
 
   static final DatabaseService instance = DatabaseService._();
-  static const databaseVersion = 5;
+  static const databaseVersion = 6;
 
   Database? _database;
 
@@ -128,7 +128,16 @@ class DatabaseService {
       CREATE TABLE IF NOT EXISTS project_members (
         project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        role TEXT NOT NULL CHECK(role IN ('OWNER', 'SCREENWRITER', 'PRODUCER')),
+        role TEXT NOT NULL CHECK(
+          role IN (
+            'OWNER',
+            'SCREENWRITER',
+            'PRODUCER',
+            'ASSISTANT_DIRECTOR',
+            'CREW',
+            'VIEWER'
+          )
+        ),
         PRIMARY KEY(project_id, user_id)
       )
     ''');
@@ -293,7 +302,93 @@ class DatabaseService {
     ''');
 
     await _ensureLocalFirstSchema(txn);
+    await _migrateProjectMemberRoleConstraint(txn);
     await _createIndexes(txn);
+  }
+
+  Future<void> _migrateProjectMemberRoleConstraint(Transaction txn) async {
+    final tableInfo = await txn.rawQuery(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'project_members'",
+    );
+    final createSql =
+        tableInfo.isEmpty ? '' : tableInfo.single['sql'] as String? ?? '';
+    if (createSql.contains("'VIEWER'")) return;
+
+    await txn.execute('ALTER TABLE project_members RENAME TO project_members_old');
+    await txn.execute('''
+      CREATE TABLE project_members (
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK(
+          role IN (
+            'OWNER',
+            'SCREENWRITER',
+            'PRODUCER',
+            'ASSISTANT_DIRECTOR',
+            'CREW',
+            'VIEWER'
+          )
+        ),
+        local_uuid TEXT,
+        remote_id TEXT,
+        workspace_type TEXT NOT NULL DEFAULT 'LOCAL_GUEST',
+        owner_account_id TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'LOCAL_ONLY',
+        local_version INTEGER NOT NULL DEFAULT 0,
+        server_version INTEGER,
+        last_synced_at TEXT,
+        deleted_at TEXT,
+        sync_error TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        PRIMARY KEY(project_id, user_id)
+      )
+    ''');
+    await txn.execute('''
+      INSERT INTO project_members (
+        project_id,
+        user_id,
+        role,
+        local_uuid,
+        remote_id,
+        workspace_type,
+        owner_account_id,
+        sync_status,
+        local_version,
+        server_version,
+        last_synced_at,
+        deleted_at,
+        sync_error,
+        created_at,
+        updated_at
+      )
+      SELECT
+        project_id,
+        user_id,
+        role,
+        local_uuid,
+        remote_id,
+        workspace_type,
+        owner_account_id,
+        sync_status,
+        local_version,
+        server_version,
+        last_synced_at,
+        deleted_at,
+        sync_error,
+        created_at,
+        updated_at
+      FROM project_members_old
+    ''');
+    await txn.execute('DROP TABLE project_members_old');
+    await txn.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_project_members_local_uuid '
+      'ON project_members(local_uuid) WHERE local_uuid IS NOT NULL',
+    );
+    await txn.execute(
+      'CREATE INDEX IF NOT EXISTS idx_project_members_sync_status '
+      'ON project_members(sync_status)',
+    );
   }
 
   Future<void> _ensureLocalFirstSchema(Transaction txn) async {
@@ -569,6 +664,27 @@ class DatabaseService {
         passwordHash: passwordHash,
         now: now,
       );
+      final producerId = await _ensureDemoUser(
+        txn,
+        email: 'producer@cinex.local',
+        fullName: 'Producer Demo',
+        passwordHash: passwordHash,
+        now: now,
+      );
+      final assistantId = await _ensureDemoUser(
+        txn,
+        email: 'ad@cinex.local',
+        fullName: 'Assistant Director Demo',
+        passwordHash: passwordHash,
+        now: now,
+      );
+      final viewerId = await _ensureDemoUser(
+        txn,
+        email: 'viewer@cinex.local',
+        fullName: 'Viewer Demo',
+        passwordHash: passwordHash,
+        now: now,
+      );
       final projectId = await _ensureDemoProject(
         txn,
         ownerId: ownerId,
@@ -577,6 +693,14 @@ class DatabaseService {
 
       await _ensureProjectMember(txn, projectId, ownerId, 'OWNER');
       await _ensureProjectMember(txn, projectId, writerId, 'SCREENWRITER');
+      await _ensureProjectMember(txn, projectId, producerId, 'PRODUCER');
+      await _ensureProjectMember(
+        txn,
+        projectId,
+        assistantId,
+        'ASSISTANT_DIRECTOR',
+      );
+      await _ensureProjectMember(txn, projectId, viewerId, 'VIEWER');
 
       final act1Id = await _ensureAct(
         txn,
@@ -592,7 +716,7 @@ class DatabaseService {
         description: 'Các nhân vật bị đẩy vào lựa chọn khó.',
         sequenceOrder: 2,
       );
-      await _ensureAct(
+      final act3Id = await _ensureAct(
         txn,
         projectId: projectId,
         title: 'Hồi 3 - Ánh sáng',
@@ -624,6 +748,33 @@ class DatabaseService {
         psychologicalDescription: 'Người dân trong thành phố ngầm.',
         now: now,
       );
+      final baoId = await _ensureCharacter(
+        txn,
+        projectId: projectId,
+        name: 'Bao',
+        roleType: 'SUPPORT',
+        psychologicalDescription:
+            'Nha bao dieu tra ve nguon sang bi che giau.',
+        now: now,
+      );
+      final huyenId = await _ensureCharacter(
+        txn,
+        projectId: projectId,
+        name: 'Huyen',
+        roleType: 'SUPPORT',
+        psychologicalDescription:
+            'Chi huy an ninh nha ga, doi dau voi Linh.',
+        now: now,
+      );
+      final securityTeamId = await _ensureCharacter(
+        txn,
+        projectId: projectId,
+        name: 'To an ninh',
+        roleType: 'CROWD',
+        psychologicalDescription:
+            'Nhom truy duoi trong cac canh hanh dong.',
+        now: now,
+      );
 
       final controlRoomId = await _ensureStoryLocation(
         txn,
@@ -639,6 +790,27 @@ class DatabaseService {
         description: 'Sân ga lộ thiên giữa thành phố.',
         notes: 'Gió mạnh, biển quảng cáo khổng lồ.',
       );
+      final marketId = await _ensureStoryLocation(
+        txn,
+        projectId: projectId,
+        name: 'Cho dem duoi long dat',
+        description: 'Khu cho dem nam ben duong ray bi bo hoang.',
+        notes: 'Anh neon do, mat duong uot va dong nguoi day dac.',
+      );
+      final rooftopId = await _ensureStoryLocation(
+        txn,
+        projectId: projectId,
+        name: 'Mai nha vien thong',
+        description: 'Mai nha cao tang gan tram phat song trung tam.',
+        notes: 'Gio lon, anten cao va tam nhin toan thanh pho.',
+      );
+      final tunnelId = await _ensureStoryLocation(
+        txn,
+        projectId: projectId,
+        name: 'Ham bao tri so 7',
+        description: 'Duong ham bao tri hep noi vao phong dieu khien.',
+        notes: 'Co nuoc ro va tieng may phat dien lien tuc.',
+      );
 
       final studioId = await _ensureShootingLocation(
         txn,
@@ -653,6 +825,22 @@ class DatabaseService {
         projectId: projectId,
         name: 'Bãi dựng Sky Station',
         address: 'Bối cảnh ngoài trời TP Thủ Đức',
+        supportsInterior: false,
+        supportsExterior: true,
+      );
+      final marketSetId = await _ensureShootingLocation(
+        txn,
+        projectId: projectId,
+        name: 'Set cho dem Zone B',
+        address: 'Kho canh tri 12 Nguyen Van Linh',
+        supportsInterior: true,
+        supportsExterior: true,
+      );
+      final rooftopSetId = await _ensureShootingLocation(
+        txn,
+        projectId: projectId,
+        name: 'Rooftop vien thong mockup',
+        address: 'Tang 18, 99 Dien Bien Phu',
         supportsInterior: false,
         supportsExterior: true,
       );
@@ -673,6 +861,38 @@ class DatabaseService {
         quantityTotal: 3,
         unit: 'bộ',
       );
+      final flycamId = await _ensureFilmResource(
+        txn,
+        projectId: projectId,
+        name: 'Flycam Mini',
+        resourceType: 'EQUIPMENT',
+        quantityTotal: 1,
+        unit: 'chiec',
+      );
+      final vestId = await _ensureFilmResource(
+        txn,
+        projectId: projectId,
+        name: 'Ao khoac phan quang',
+        resourceType: 'COSTUME',
+        quantityTotal: 4,
+        unit: 'cai',
+      );
+      final deviceBoxId = await _ensureFilmResource(
+        txn,
+        projectId: projectId,
+        name: 'Hop thiet bi cu',
+        resourceType: 'PROP',
+        quantityTotal: 2,
+        unit: 'hop',
+      );
+      final vanId = await _ensureFilmResource(
+        txn,
+        projectId: projectId,
+        name: 'Xe van san xuat',
+        resourceType: 'VEHICLE',
+        quantityTotal: 1,
+        unit: 'xe',
+      );
 
       final scene1Id = await _ensureScene(
         txn,
@@ -689,7 +909,7 @@ class DatabaseService {
         estimatedMinutes: 8,
         priority: 1,
         writingStatus: 'DONE',
-        productionStatus: 'READY_FOR_PLANNING',
+        productionStatus: 'SCHEDULED',
         now: now,
       );
       final scene2Id = await _ensureScene(
@@ -727,6 +947,95 @@ class DatabaseService {
         productionStatus: 'NOT_READY',
         now: now,
       );
+      final scene4Id = await _ensureScene(
+        txn,
+        projectId: projectId,
+        actId: act2Id,
+        storyLocationId: marketId,
+        shootingLocationId: marketSetId,
+        sceneNumber: 4,
+        title: 'Lenh truy bat',
+        summary:
+            'Huyen cong bo lenh phong toa khi Bao dua Linh vao khu cho dem.',
+        settingType: 'EXT',
+        timeOfDay: 'NIGHT',
+        estimatedMinutes: 10,
+        priority: 2,
+        writingStatus: 'IN_PROGRESS',
+        productionStatus: 'READY_FOR_PLANNING',
+        now: now,
+      );
+      final scene5Id = await _ensureScene(
+        txn,
+        projectId: projectId,
+        actId: act2Id,
+        storyLocationId: tunnelId,
+        shootingLocationId: null,
+        sceneNumber: 5,
+        title: 'Mat du lieu trong ham',
+        summary:
+            'Minh tim thay ban sao du lieu nhung he thong bao dong bi kich hoat.',
+        settingType: 'INT',
+        timeOfDay: 'NIGHT',
+        estimatedMinutes: 14,
+        priority: 4,
+        writingStatus: 'TODO',
+        productionStatus: 'NOT_READY',
+        now: now,
+      );
+      final scene6Id = await _ensureScene(
+        txn,
+        projectId: projectId,
+        actId: act3Id,
+        storyLocationId: rooftopId,
+        shootingLocationId: rooftopSetId,
+        sceneNumber: 6,
+        title: 'Diem hen tren mai nha',
+        summary: 'Linh va Bao dua nguon sang len tram phat tren mai nha.',
+        settingType: 'EXT',
+        timeOfDay: 'NIGHT',
+        estimatedMinutes: 9,
+        priority: 1,
+        writingStatus: 'DONE',
+        productionStatus: 'SCHEDULED',
+        now: now,
+      );
+      final scene7Id = await _ensureScene(
+        txn,
+        projectId: projectId,
+        actId: act3Id,
+        storyLocationId: controlRoomId,
+        shootingLocationId: studioId,
+        sceneNumber: 7,
+        title: 'Phong sang thuc tinh',
+        summary:
+            'He thong chieu sang khoi dong lai khi Linh chap nhan hy sinh bo mach.',
+        settingType: 'INT',
+        timeOfDay: 'DAY',
+        estimatedMinutes: 11,
+        priority: 1,
+        writingStatus: 'DONE',
+        productionStatus: 'SHOT',
+        now: now,
+      );
+      final scene8Id = await _ensureScene(
+        txn,
+        projectId: projectId,
+        actId: act3Id,
+        storyLocationId: stationId,
+        shootingLocationId: backlotId,
+        sceneNumber: 8,
+        title: 'Loi thoat san ga',
+        summary:
+            'Dam dong nha ga tao loi thoat cho nhom trong luc den thanh pho bat sang.',
+        settingType: 'EXT',
+        timeOfDay: 'NIGHT',
+        estimatedMinutes: 7,
+        priority: 3,
+        writingStatus: 'TODO',
+        productionStatus: 'READY_FOR_PLANNING',
+        now: now,
+      );
 
       await _ensureSceneCharacter(txn, scene1Id, linhId);
       await _ensureSceneCharacter(txn, scene2Id, linhId);
@@ -734,10 +1043,78 @@ class DatabaseService {
       await _ensureSceneCharacter(txn, scene2Id, crowdId);
       await _ensureSceneCharacter(txn, scene3Id, linhId);
       await _ensureSceneCharacter(txn, scene3Id, minhId);
+      await _ensureSceneCharacter(txn, scene4Id, linhId);
+      await _ensureSceneCharacter(txn, scene4Id, baoId);
+      await _ensureSceneCharacter(txn, scene4Id, huyenId);
+      await _ensureSceneCharacter(txn, scene4Id, securityTeamId);
+      await _ensureSceneCharacter(txn, scene5Id, minhId);
+      await _ensureSceneCharacter(txn, scene5Id, baoId);
+      await _ensureSceneCharacter(txn, scene6Id, linhId);
+      await _ensureSceneCharacter(txn, scene6Id, baoId);
+      await _ensureSceneCharacter(txn, scene7Id, linhId);
+      await _ensureSceneCharacter(txn, scene7Id, minhId);
+      await _ensureSceneCharacter(txn, scene7Id, huyenId);
+      await _ensureSceneCharacter(txn, scene8Id, linhId);
+      await _ensureSceneCharacter(txn, scene8Id, minhId);
+      await _ensureSceneCharacter(txn, scene8Id, crowdId);
 
       await _ensureSceneResource(txn, scene1Id, cameraId, 1);
       await _ensureSceneResource(txn, scene1Id, ledId, 2);
       await _ensureSceneResource(txn, scene2Id, cameraId, 1);
+      await _ensureSceneResource(txn, scene4Id, cameraId, 1);
+      await _ensureSceneResource(txn, scene4Id, vestId, 3);
+      await _ensureSceneResource(txn, scene5Id, deviceBoxId, 1);
+      await _ensureSceneResource(txn, scene6Id, flycamId, 1);
+      await _ensureSceneResource(txn, scene7Id, ledId, 3);
+      await _ensureSceneResource(txn, scene8Id, vanId, 1);
+
+      final studioDayId = await _ensureShootingDay(
+        txn,
+        projectId: projectId,
+        createdBy: ownerId,
+        shootingDate: '2026-07-15',
+        title: 'Ngay quay 01 - Studio',
+        status: 'CONFIRMED',
+        maxMinutes: 240,
+        notes: 'Seed data: ngay quay noi canh va test gio quay.',
+        now: now,
+      );
+      final exteriorDayId = await _ensureShootingDay(
+        txn,
+        projectId: projectId,
+        createdBy: producerId,
+        shootingDate: '2026-07-16',
+        title: 'Ngay quay 02 - Ngoai canh',
+        status: 'DRAFT',
+        maxMinutes: 180,
+        notes: 'Seed data: ngay quay ngoai canh va canh san sang len lich.',
+        now: now,
+      );
+
+      await _ensureShootingDayScene(
+        txn,
+        shootingDayId: studioDayId,
+        sceneId: scene1Id,
+        sequenceOrder: 1,
+        plannedStartTime: '08:00',
+        plannedEndTime: '08:08',
+      );
+      await _ensureShootingDayScene(
+        txn,
+        shootingDayId: studioDayId,
+        sceneId: scene7Id,
+        sequenceOrder: 2,
+        plannedStartTime: '08:20',
+        plannedEndTime: '08:31',
+      );
+      await _ensureShootingDayScene(
+        txn,
+        shootingDayId: exteriorDayId,
+        sceneId: scene6Id,
+        sequenceOrder: 1,
+        plannedStartTime: '17:30',
+        plannedEndTime: '17:39',
+      );
     });
   }
 
@@ -1127,6 +1504,72 @@ class DatabaseService {
         'scene_id': sceneId,
         'resource_id': resourceId,
         'required_quantity': requiredQuantity,
+        'notes': null,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<int> _ensureShootingDay(
+    Transaction txn, {
+    required int projectId,
+    required int createdBy,
+    required String shootingDate,
+    required String title,
+    required String status,
+    required int maxMinutes,
+    required String? notes,
+    required String now,
+  }) async {
+    final rows = await txn.query(
+      'shooting_days',
+      columns: ['id'],
+      where: 'project_id = ? AND shooting_date = ? AND title = ? COLLATE NOCASE',
+      whereArgs: [projectId, shootingDate, title],
+      limit: 1,
+    );
+    final payload = {
+      'project_id': projectId,
+      'shooting_date': shootingDate,
+      'title': title,
+      'status': status,
+      'max_minutes': maxMinutes,
+      'notes': notes,
+      'created_by': createdBy,
+      'updated_at': now,
+    };
+    if (rows.isEmpty) {
+      return txn.insert('shooting_days', {
+        ...payload,
+        'created_at': now,
+      });
+    }
+    final id = rows.single['id'] as int;
+    await txn.update(
+      'shooting_days',
+      payload,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return id;
+  }
+
+  Future<void> _ensureShootingDayScene(
+    Transaction txn, {
+    required int shootingDayId,
+    required int sceneId,
+    required int sequenceOrder,
+    required String plannedStartTime,
+    required String plannedEndTime,
+  }) async {
+    await txn.insert(
+      'shooting_day_scenes',
+      {
+        'shooting_day_id': shootingDayId,
+        'scene_id': sceneId,
+        'sequence_order': sequenceOrder,
+        'planned_start_time': plannedStartTime,
+        'planned_end_time': plannedEndTime,
         'notes': null,
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,

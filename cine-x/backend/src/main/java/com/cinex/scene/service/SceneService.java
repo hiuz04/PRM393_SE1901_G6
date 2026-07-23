@@ -24,8 +24,10 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -109,17 +111,60 @@ public class SceneService {
     @Transactional
     public List<SceneResponse> reorder(Long projectId, List<ReorderItem> items) {
         accessService.requireStructureEditor(projectId);
-        Set<Integer> numbers = new HashSet<>();
+        List<Scene> scenes = sceneRepository.findByProjectIdOrderBySceneNumberAsc(projectId);
+        Map<Long, Scene> scenesById = new LinkedHashMap<>();
+        Map<Scene, Integer> targetNumbers = new LinkedHashMap<>();
+        int maxCurrentNumber = 0;
+        for (Scene scene : scenes) {
+            scenesById.put(scene.getId(), scene);
+            maxCurrentNumber = Math.max(maxCurrentNumber, scene.getSceneNumber());
+        }
+
+        Set<Long> sceneIds = new HashSet<>();
+        Set<Integer> requestedNumbers = new HashSet<>();
         for (ReorderItem item : items) {
-            if (!numbers.add(item.sceneNumber())) {
+            if (item.sceneNumber() < 1) {
+                throw new BadRequestException("sceneNumber phai >= 1");
+            }
+            if (!sceneIds.add(item.sceneId())) {
+                throw new BadRequestException("sceneId bi trung");
+            }
+            if (!requestedNumbers.add(item.sceneNumber())) {
                 throw new BadRequestException("sceneNumber bi trung");
             }
+            Scene scene = scenesById.get(item.sceneId());
+            if (scene == null) {
+                throw new NotFoundException("Khong tim thay Scene");
+            }
+            targetNumbers.put(scene, item.sceneNumber());
         }
-        for (ReorderItem item : items) {
-            Scene scene = requireScene(projectId, item.sceneId());
-            scene.setSceneNumber(item.sceneNumber());
+
+        Set<Integer> finalNumbers = new HashSet<>();
+        int maxFinalNumber = 0;
+        for (Scene scene : scenes) {
+            int finalNumber = targetNumbers.getOrDefault(scene, scene.getSceneNumber());
+            maxFinalNumber = Math.max(maxFinalNumber, finalNumber);
+            if (!finalNumbers.add(finalNumber)) {
+                throw new ConflictException("sceneNumber da ton tai");
+            }
         }
-        sceneRepository.flush();
+
+        List<Map.Entry<Scene, Integer>> changed = targetNumbers.entrySet().stream()
+                .filter(entry -> entry.getKey().getSceneNumber() != entry.getValue())
+                .toList();
+        int tempNumber = Math.max(maxCurrentNumber, maxFinalNumber) + 1;
+        for (Map.Entry<Scene, Integer> entry : changed) {
+            entry.getKey().setSceneNumber(tempNumber++);
+        }
+        if (!changed.isEmpty()) {
+            sceneRepository.flush();
+        }
+        for (Map.Entry<Scene, Integer> entry : changed) {
+            entry.getKey().setSceneNumber(entry.getValue());
+        }
+        if (!changed.isEmpty()) {
+            sceneRepository.flush();
+        }
         return sceneRepository.findByProjectIdOrderBySceneNumberAsc(projectId).stream().map(this::toResponse).toList();
     }
 
@@ -127,15 +172,31 @@ public class SceneService {
         if (request.sceneNumber() < 1) {
             throw new BadRequestException("sceneNumber phai >= 1");
         }
+        if (request.status() == null) {
+            throw new BadRequestException("Status bat buoc");
+        }
+        if (request.estimatedMinutes() != null && request.estimatedMinutes() < 1) {
+            throw new BadRequestException("estimatedMinutes phai >= 1");
+        }
+        if (request.actId() == null) {
+            throw new BadRequestException("Act bat buoc");
+        }
+        if (request.locationId() == null) {
+            throw new BadRequestException("Location bat buoc");
+        }
         Act act = actRepository.findByIdAndProjectId(request.actId(), projectId)
                 .orElseThrow(() -> new BadRequestException("Act khong thuoc project"));
         StoryLocation location = locationRepository.findByIdAndProjectId(request.locationId(), projectId)
                 .orElseThrow(() -> new BadRequestException("Location khong thuoc project"));
+        String summary = request.summary() == null ? "" : request.summary().trim();
+        if (summary.isBlank()) {
+            throw new BadRequestException("Summary bat buoc");
+        }
         scene.setAct(act);
         scene.setLocation(location);
         scene.setSceneNumber(request.sceneNumber());
         scene.setTitle(blankToNull(request.title()));
-        scene.setSummary(request.summary().trim());
+        scene.setSummary(summary);
         scene.setStatus(request.status());
         scene.setEstimatedMinutes(request.estimatedMinutes());
         scene.setCharacters(resolveCharacters(projectId, request.characterIds()));

@@ -160,7 +160,7 @@ class _ProjectHeader extends StatelessWidget {
           child: Row(
             children: [
               IconButton.filledTonal(
-                tooltip: 'Quay láº¡i',
+                tooltip: 'Quay lại',
                 onPressed: Navigator.of(context).canPop()
                     ? () => Navigator.of(context).maybePop()
                     : null,
@@ -276,11 +276,41 @@ class _StoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return const DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(icon: Icon(Icons.view_column_rounded), text: 'Quản lý hồi'),
+              Tab(icon: Icon(Icons.movie_creation_rounded), text: 'Quản lý cảnh'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _ActsList(),
+                _ScenesList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActsList extends StatelessWidget {
+  const _ActsList();
+
+  @override
+  Widget build(BuildContext context) {
     final provider = context.watch<WorkspaceProvider>();
     if (provider.acts.isEmpty) {
       return EmptyView(
         title: 'Chưa có hồi',
-        message: 'Tạo một hồi trước khi thêm cảnh vào bảng kịch bản.',
+        message: 'Tạo hồi trước khi chia cảnh cho kịch bản.',
         icon: Icons.view_column_rounded,
         action: FilledButton.icon(
           onPressed: provider.can(ProjectPermission.manageStory)
@@ -291,11 +321,12 @@ class _StoryPage extends StatelessWidget {
         ),
       );
     }
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
       children: [
         _SectionToolbar(
-          title: 'Bảng cảnh',
+          title: 'Hồi kịch bản',
           actions: [
             _ToolbarAction(
               icon: Icons.playlist_add_rounded,
@@ -303,6 +334,248 @@ class _StoryPage extends StatelessWidget {
               enabled: provider.can(ProjectPermission.manageStory),
               onPressed: () => _showActSheet(context),
             ),
+          ],
+        ),
+        ...provider.acts.map((act) => _ActManagementCard(act: act)),
+      ],
+    );
+  }
+}
+
+class _ActManagementCard extends StatelessWidget {
+  const _ActManagementCard({required this.act});
+
+  final Act act;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<WorkspaceProvider>();
+    final canEdit = provider.can(ProjectPermission.manageStory);
+    final actScenes = provider.scenes
+        .where((scene) => scene.actId == act.id)
+        .toList()
+      ..sort((a, b) => a.sceneNumber.compareTo(b.sceneNumber));
+    final sceneCount = actScenes.length;
+    final description = (act.description ?? '').trim();
+    return _Panel(
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
+        leading: CircleAvatar(
+          backgroundColor: CineXPalette.primary.withAlpha(32),
+          foregroundColor: CineXPalette.primary,
+          child: Text(
+            '${act.sequenceOrder}',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
+        title: Text(act.title),
+        subtitle: Text('$sceneCount cảnh'),
+        children: [
+          if (description.isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                description,
+                style: const TextStyle(color: CineXPalette.textSecondary),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (actScenes.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _MutedText('Chưa có phân cảnh nào trong hồi này.'),
+              ),
+            )
+          else
+            ...actScenes.map(
+              (scene) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  tileColor: CineXPalette.primary.withAlpha(16),
+                  title: Text(scene.sceneHeading),
+                  subtitle: Text(
+                    [
+                      sceneStatusLabel(scene.writingStatus),
+                      if (scene.summary.trim().isNotEmpty) scene.summary,
+                    ].join(' - '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: canEdit
+                      ? IconButton(
+                          tooltip: 'Sửa cảnh',
+                          onPressed: () => _showSceneSheet(
+                            context,
+                            scene: scene,
+                          ),
+                          icon: const Icon(Icons.edit_rounded),
+                        )
+                      : null,
+                  onTap: canEdit
+                      ? () => _showSceneSheet(context, scene: scene)
+                      : null,
+                ),
+              ),
+            ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed:
+                    canEdit ? () => _showActSheet(context, act: act) : null,
+                icon: const Icon(Icons.edit_rounded),
+                label: const Text('Sửa hồi'),
+              ),
+              OutlinedButton.icon(
+                onPressed: canEdit
+                    ? () async {
+                        final confirmed = await _confirm(
+                          context,
+                          title: 'Xóa hồi?',
+                          message:
+                              'Hồi này và $sceneCount cảnh bên trong sẽ bị xóa, đồng thời gỡ khỏi lịch quay.',
+                        );
+                        if (!context.mounted || !confirmed) return;
+                        final ok = await provider.deleteAct(act);
+                        if (context.mounted) {
+                          _snack(
+                            context,
+                            ok
+                                ? 'Đã xóa hồi'
+                                : provider.error ?? 'Không thể xóa hồi',
+                          );
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Xóa hồi'),
+              ),
+              FilledButton.icon(
+                onPressed: canEdit
+                    ? () => _showSceneSheet(context, initialActId: act.id)
+                    : null,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Thêm phân cảnh'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScenesList extends StatefulWidget {
+  const _ScenesList();
+
+  @override
+  State<_ScenesList> createState() => _ScenesListState();
+}
+
+class _ScenesListState extends State<_ScenesList> {
+  final _search = TextEditingController();
+  int? _actId;
+  int? _characterId;
+  int? _locationId;
+  String? _settingType;
+  String? _timeOfDay;
+  String? _writingStatus;
+  String? _productionStatus;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<WorkspaceProvider>();
+    if (_actId != null && !provider.acts.any((act) => act.id == _actId)) {
+      _actId = null;
+    }
+    if (_characterId != null &&
+        !provider.characters.any((character) => character.id == _characterId)) {
+      _characterId = null;
+    }
+    if (_locationId != null &&
+        !provider.storyLocations
+            .any((location) => location.id == _locationId)) {
+      _locationId = null;
+    }
+    final keyword = _search.text.trim().toLowerCase();
+    final scenes = provider.scenes.where((scene) {
+      final byKeyword = keyword.isEmpty ||
+          [
+            scene.sceneHeading,
+            scene.title ?? '',
+            scene.summary,
+            scene.actTitle,
+            scene.storyLocationName,
+          ].any((value) => value.toLowerCase().contains(keyword));
+      final byAct = _actId == null || scene.actId == _actId;
+      final byCharacter = _characterId == null ||
+          scene.characters.any((character) => character.id == _characterId);
+      final byLocation =
+          _locationId == null || scene.storyLocationId == _locationId;
+      final bySetting =
+          _settingType == null || scene.settingType == _settingType;
+      final byTime = _timeOfDay == null || scene.timeOfDay == _timeOfDay;
+      final byWriting = _writingStatus == null ||
+          scene.writingStatus == _writingStatus;
+      final byProduction = _productionStatus == null ||
+          scene.productionStatus == _productionStatus;
+      return byKeyword &&
+          byAct &&
+          byCharacter &&
+          byLocation &&
+          bySetting &&
+          byTime &&
+          byWriting &&
+          byProduction;
+    }).toList()
+      ..sort((a, b) => a.sceneNumber.compareTo(b.sceneNumber));
+    final hasFilters = keyword.isNotEmpty ||
+        _actId != null ||
+        _characterId != null ||
+        _locationId != null ||
+        _settingType != null ||
+        _timeOfDay != null ||
+        _writingStatus != null ||
+        _productionStatus != null;
+
+    if (provider.scenes.isEmpty) {
+      return EmptyView(
+        title: 'Chưa có cảnh',
+        message: 'Thêm cảnh sau khi đã tạo hồi và bối cảnh truyện.',
+        icon: Icons.movie_creation_outlined,
+        action: FilledButton.icon(
+          onPressed: provider.can(ProjectPermission.manageStory)
+              ? () => _showSceneSheet(context)
+              : null,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Tạo cảnh'),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
+      children: [
+        _SectionToolbar(
+          title: 'Cảnh kịch bản (${scenes.length})',
+          actions: [
             _ToolbarAction(
               icon: Icons.add_rounded,
               tooltip: 'Tạo cảnh',
@@ -311,47 +584,202 @@ class _StoryPage extends StatelessWidget {
             ),
           ],
         ),
-        ...provider.acts.map((act) {
-          final actScenes = provider.scenes
-              .where((scene) => scene.actId == act.id)
-              .toList()
-            ..sort((a, b) => a.sceneNumber.compareTo(b.sceneNumber));
-          return _Panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${act.sequenceOrder}. ${act.title}',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: CineXPalette.textPrimary,
-                                ),
-                      ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 520;
+            final searchField = TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Tìm theo cảnh, tiêu đề, tóm tắt',
+                prefixIcon: Icon(Icons.search_rounded),
+              ),
+            );
+            final filters = <Widget>[
+              DropdownButtonFormField<int?>(
+                initialValue: _actId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Hồi'),
+                items: [
+                  const DropdownMenuItem(
+                    value: null,
+                    child: _DropdownText('Tất cả'),
+                  ),
+                  ...provider.acts.map(
+                    (act) => DropdownMenuItem<int?>(
+                      value: act.id,
+                      child: _DropdownText(act.title),
                     ),
-                    _Badge(label: '${actScenes.length} cảnh'),
-                  ],
-                ),
-                if (act.description != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    act.description!,
-                    style: const TextStyle(color: CineXPalette.textSecondary),
                   ),
                 ],
-                const SizedBox(height: 12),
-                if (actScenes.isEmpty)
-                  const _MutedText('Chưa có cảnh trong hồi này.')
+                onChanged: (value) => setState(() => _actId = value),
+              ),
+              DropdownButtonFormField<int?>(
+                initialValue: _characterId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Nhân vật'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: _DropdownText('Tất cả'),
+                  ),
+                  ...provider.characters.map(
+                    (character) => DropdownMenuItem<int?>(
+                      value: character.id,
+                      child: _DropdownText(character.name),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _characterId = value),
+              ),
+              DropdownButtonFormField<int?>(
+                initialValue: _locationId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Bối cảnh truyện'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: _DropdownText('Tất cả'),
+                  ),
+                  ...provider.storyLocations.map(
+                    (location) => DropdownMenuItem<int?>(
+                      value: location.id,
+                      child: _DropdownText(location.name),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _locationId = value),
+              ),
+              DropdownButtonFormField<String?>(
+                initialValue: _settingType,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Nội / ngoại'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: _DropdownText('Tất cả'),
+                  ),
+                  ...SceneValidators.settingTypes.map(
+                    (value) => DropdownMenuItem<String?>(
+                      value: value,
+                      child: _DropdownText(settingTypeLabel(value)),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _settingType = value),
+              ),
+              DropdownButtonFormField<String?>(
+                initialValue: _timeOfDay,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Ngày / đêm'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: _DropdownText('Tất cả'),
+                  ),
+                  ...SceneValidators.timeOfDayValues.map(
+                    (value) => DropdownMenuItem<String?>(
+                      value: value,
+                      child: _DropdownText(timeOfDayLabel(value)),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _timeOfDay = value),
+              ),
+              DropdownButtonFormField<String?>(
+                initialValue: _writingStatus,
+                isExpanded: true,
+                decoration:
+                    const InputDecoration(labelText: 'Trạng thái viết'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: _DropdownText('Tất cả'),
+                  ),
+                  ...SceneValidators.writingStatuses.map(
+                    (status) => DropdownMenuItem<String?>(
+                      value: status,
+                      child: _DropdownText(sceneStatusLabel(status)),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _writingStatus = value),
+              ),
+              DropdownButtonFormField<String?>(
+                initialValue: _productionStatus,
+                isExpanded: true,
+                decoration:
+                    const InputDecoration(labelText: 'Trạng thái sản xuất'),
+                items: [
+                  const DropdownMenuItem(
+                    value: null,
+                    child: _DropdownText('Tất cả'),
+                  ),
+                  ...SceneValidators.productionStatuses.map(
+                    (status) => DropdownMenuItem<String?>(
+                      value: status,
+                      child: _DropdownText(productionStatusLabel(status)),
+                    ),
+                  ),
+                ],
+                onChanged: (value) =>
+                    setState(() => _productionStatus = value),
+              ),
+            ];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                searchField,
+                const SizedBox(height: 10),
+                if (compact)
+                  ...[
+                    for (final filter in filters) ...[
+                      filter,
+                      const SizedBox(height: 10),
+                    ],
+                  ]
                 else
-                  ...actScenes.map((scene) => _SceneCard(scene: scene)),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final filter in filters)
+                        SizedBox(width: 220, child: filter),
+                    ],
+                  ),
+                if (hasFilters)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _clearFilters,
+                      icon: const Icon(Icons.filter_alt_off_rounded),
+                      label: const Text('Xóa lọc'),
+                    ),
+                  ),
               ],
-            ),
-          );
-        }),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        if (scenes.isEmpty)
+          const _Panel(child: _MutedText('Không có cảnh theo bộ lọc này.'))
+        else
+          ...scenes.map((scene) => _SceneCard(scene: scene)),
       ],
     );
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _search.clear();
+      _actId = null;
+      _characterId = null;
+      _locationId = null;
+      _settingType = null;
+      _timeOfDay = null;
+      _writingStatus = null;
+      _productionStatus = null;
+    });
   }
 }
 
@@ -387,12 +815,15 @@ class _SceneCard extends StatelessWidget {
                   enabled: canEdit,
                   onSelected: (value) async {
                     var ok = false;
-                    if (value == 'delete') {
+                    if (value == 'edit') {
+                      _showSceneSheet(context, scene: scene);
+                      return;
+                    } else if (value == 'delete') {
                       final confirmed = await _confirm(
                         context,
                         title: 'Xóa cảnh?',
                         message:
-                            'Cảnh đã lên lịch sẽ được hủy thay vì xóa hẳn.',
+                            'Cảnh và các liên kết lịch quay, nhân vật, tài nguyên sẽ bị xóa.',
                       );
                       if (!context.mounted || !confirmed) return;
                       ok = await provider.deleteScene(scene);
@@ -409,11 +840,12 @@ class _SceneCard extends StatelessWidget {
                     }
                   },
                   itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Sửa cảnh')),
                     PopupMenuItem(
                         value: 'ready', child: Text('Sẵn sàng lên lịch')),
                     PopupMenuItem(
                         value: 'done', child: Text('Đánh dấu viết xong')),
-                    PopupMenuItem(value: 'delete', child: Text('Xóa / hủy')),
+                    PopupMenuItem(value: 'delete', child: Text('Xóa cảnh')),
                   ],
                 ),
               ],
@@ -790,14 +1222,21 @@ class _AssetsListState extends State<_AssetsList> {
   }
 }
 
-class _CalendarPage extends StatelessWidget {
+class _CalendarPage extends StatefulWidget {
   const _CalendarPage();
+
+  @override
+  State<_CalendarPage> createState() => _CalendarPageState();
+}
+
+class _CalendarPageState extends State<_CalendarPage> {
+  int? _selectedDayId;
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkspaceProvider>();
-    final activeSelectedDateDays =
-        provider.selectedDateDays.where((day) => day.isActive).toList();
+    final selectedDateDays = provider.selectedDateDays;
+    final selectedDay = _resolveSelectedDay(selectedDateDays);
     final shootingDaysByDate = <DateTime, List<ShootingDay>>{};
     for (final day in provider.shootingDays) {
       shootingDaysByDate
@@ -853,13 +1292,20 @@ class _CalendarPage extends StatelessWidget {
               provider.selectedDate.month,
             ),
             selectedDate: provider.selectedDate,
+            selectedDayId: selectedDay?.id,
             shootingDaysByDate: shootingDaysByDate,
             canManage: provider.can(ProjectPermission.manageSchedule),
-            onDateSelected: (date) => provider.loadCalendar(date: date),
+            onDateSelected: (date) {
+              setState(() => _selectedDayId = null);
+              provider.loadCalendar(date: date);
+            },
             onMonthChanged: (month) => provider.loadCalendar(date: month),
             onAddDay: (date) =>
                 _showShootingDaySheet(context, initialDate: date),
-            onEditDay: (day) => _showShootingDaySheet(context, day: day),
+            onDaySelected: (day) {
+              setState(() => _selectedDayId = day.id);
+              provider.loadCalendar(date: day.shootingDate);
+            },
           ),
         ),
         Text(
@@ -871,19 +1317,25 @@ class _CalendarPage extends StatelessWidget {
         const SizedBox(height: 8),
         _SelectedDateToolbar(
           date: provider.selectedDate,
-          days: provider.selectedDateDays,
           canManage: provider.can(ProjectPermission.manageSchedule),
           onAdd: () => _showShootingDaySheet(context,
               initialDate: provider.selectedDate),
-          onEdit: provider.selectedDateDays.length == 1
+          onEdit: selectedDay != null
               ? () => _showShootingDaySheet(
                     context,
-                    day: provider.selectedDateDays.first,
+                    day: selectedDay,
                   )
               : null,
         ),
         const SizedBox(height: 8),
-        if (provider.selectedDateDays.isEmpty)
+        if (selectedDateDays.length > 1)
+          _ShootingDayChoiceBar(
+            days: selectedDateDays,
+            selectedDayId: selectedDay?.id,
+            onSelected: (day) => setState(() => _selectedDayId = day.id),
+          ),
+        if (selectedDateDays.length > 1) const SizedBox(height: 8),
+        if (selectedDay == null)
           _Panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -904,42 +1356,50 @@ class _CalendarPage extends StatelessWidget {
             ),
           )
         else
-          ...provider.selectedDateDays.map((day) => _ShootingDayCard(day: day)),
-        const SizedBox(height: 16),
-        Text(
-          'Cảnh sẵn sàng chưa lên lịch',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: CineXPalette.textPrimary,
-              ),
-        ),
-        const SizedBox(height: 8),
-        if (provider.unscheduledScenes.isEmpty)
-          const _Panel(
-              child: _MutedText('Không có cảnh sẵn sàng lên lịch đang chờ.'))
-        else
-          ...provider.unscheduledScenes.map(
-            (scene) => _Panel(
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(scene.sceneHeading),
-                subtitle: Text(
-                  '${scene.shootingLocationLabel} · '
-                  '${scene.estimatedDurationMinutes} phút',
-                ),
-                trailing: IconButton(
-                  tooltip: activeSelectedDateDays.isEmpty
-                      ? 'Tạo ngày quay trước'
-                      : 'Xếp cảnh vào ngày đã chọn',
-                  onPressed: provider.can(ProjectPermission.manageSchedule) &&
-                          activeSelectedDateDays.isNotEmpty
-                      ? () => _showScheduleSceneSheet(context, scene: scene)
-                      : null,
-                  icon: const Icon(Icons.add_rounded),
-                ),
-              ),
-            ),
-          ),
+          _ShootingDayCard(day: selectedDay),
       ],
+    );
+  }
+
+  ShootingDay? _resolveSelectedDay(List<ShootingDay> days) {
+    if (days.isEmpty) return null;
+    final selectedId = _selectedDayId;
+    if (selectedId != null) {
+      for (final day in days) {
+        if (day.id == selectedId) return day;
+      }
+    }
+    return days.first;
+  }
+}
+
+class _ShootingDayChoiceBar extends StatelessWidget {
+  const _ShootingDayChoiceBar({
+    required this.days,
+    required this.selectedDayId,
+    required this.onSelected,
+  });
+
+  final List<ShootingDay> days;
+  final int? selectedDayId;
+  final ValueChanged<ShootingDay> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final day in days) ...[
+            ChoiceChip(
+              label: Text(day.title),
+              selected: day.id == selectedDayId,
+              onSelected: (_) => onSelected(day),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -947,14 +1407,12 @@ class _CalendarPage extends StatelessWidget {
 class _SelectedDateToolbar extends StatelessWidget {
   const _SelectedDateToolbar({
     required this.date,
-    required this.days,
     required this.canManage,
     required this.onAdd,
     this.onEdit,
   });
 
   final DateTime date;
-  final List<ShootingDay> days;
   final bool canManage;
   final VoidCallback onAdd;
   final VoidCallback? onEdit;
@@ -982,8 +1440,7 @@ class _SelectedDateToolbar extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         IconButton.filledTonal(
-          tooltip:
-              days.length == 1 ? 'Sửa ngày quay' : 'Chọn một ngày quay để sửa',
+          tooltip: onEdit == null ? 'Chọn một ngày quay để sửa' : 'Sửa ngày quay',
           onPressed: canManage ? onEdit : null,
           icon: const Icon(Icons.edit_calendar_rounded),
         ),
@@ -996,22 +1453,24 @@ class _ProductionCalendar extends StatelessWidget {
   const _ProductionCalendar({
     required this.month,
     required this.selectedDate,
+    required this.selectedDayId,
     required this.shootingDaysByDate,
     required this.canManage,
     required this.onDateSelected,
     required this.onMonthChanged,
     required this.onAddDay,
-    required this.onEditDay,
+    required this.onDaySelected,
   });
 
   final DateTime month;
   final DateTime selectedDate;
+  final int? selectedDayId;
   final Map<DateTime, List<ShootingDay>> shootingDaysByDate;
   final bool canManage;
   final ValueChanged<DateTime> onDateSelected;
   final ValueChanged<DateTime> onMonthChanged;
   final ValueChanged<DateTime> onAddDay;
-  final ValueChanged<ShootingDay> onEditDay;
+  final ValueChanged<ShootingDay> onDaySelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1086,12 +1545,13 @@ class _ProductionCalendar extends StatelessWidget {
                   days: days,
                   inMonth: date.month == monthStart.month,
                   selected: _sameDate(date, selectedDate),
+                  selectedDayId: selectedDayId,
                   today: _sameDate(date, DateTime.now()),
                   compact: compact,
                   canManage: canManage,
                   onSelect: () => onDateSelected(date),
                   onAdd: () => onAddDay(date),
-                  onEditDay: onEditDay,
+                  onDaySelected: onDaySelected,
                 );
               },
             ),
@@ -1129,24 +1589,26 @@ class _CalendarDayCell extends StatelessWidget {
     required this.days,
     required this.inMonth,
     required this.selected,
+    required this.selectedDayId,
     required this.today,
     required this.compact,
     required this.canManage,
     required this.onSelect,
     required this.onAdd,
-    required this.onEditDay,
+    required this.onDaySelected,
   });
 
   final DateTime date;
   final List<ShootingDay> days;
   final bool inMonth;
   final bool selected;
+  final int? selectedDayId;
   final bool today;
   final bool compact;
   final bool canManage;
   final VoidCallback onSelect;
   final VoidCallback onAdd;
-  final ValueChanged<ShootingDay> onEditDay;
+  final ValueChanged<ShootingDay> onDaySelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1231,31 +1693,38 @@ class _CalendarDayCell extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Expanded(
-                  child: Column(
-                    children: [
-                      ...visibleDays.map(
-                        (day) => _CalendarEventPill(
-                          day: day,
-                          compact: compact,
-                          onTap: canManage ? () => onEditDay(day) : null,
-                        ),
-                      ),
-                      if (days.length > visibleDays.length)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '+${days.length - visibleDays.length} lịch',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: CineXPalette.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
+                  child: compact
+                      ? _CompactCalendarMarkers(
+                          days: days,
+                          selectedDayId: selectedDayId,
+                          onTap: onSelect,
+                        )
+                      : Column(
+                          children: [
+                            ...visibleDays.map(
+                              (day) => _CalendarEventPill(
+                                day: day,
+                                compact: compact,
+                                selected: day.id == selectedDayId,
+                                onTap: () => onDaySelected(day),
+                              ),
                             ),
-                          ),
+                            if (days.length > visibleDays.length)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '+${days.length - visibleDays.length} lịch',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: CineXPalette.textSecondary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -1266,15 +1735,68 @@ class _CalendarDayCell extends StatelessWidget {
   }
 }
 
+class _CompactCalendarMarkers extends StatelessWidget {
+  const _CompactCalendarMarkers({
+    required this.days,
+    required this.selectedDayId,
+    required this.onTap,
+  });
+
+  final List<ShootingDay> days;
+  final int? selectedDayId;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (days.isEmpty) return const SizedBox.shrink();
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Wrap(
+          spacing: 3,
+          runSpacing: 3,
+          children: [
+            for (final day in days.take(4))
+              Container(
+                width: day.id == selectedDayId ? 18 : 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: _shootingDayStatusColor(day.status),
+                  borderRadius: BorderRadius.circular(99),
+                  border: day.id == selectedDayId
+                      ? Border.all(color: CineXPalette.textPrimary)
+                      : null,
+                ),
+              ),
+            if (days.length > 4)
+              Text(
+                '+${days.length - 4}',
+                style: const TextStyle(
+                  color: CineXPalette.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CalendarEventPill extends StatelessWidget {
   const _CalendarEventPill({
     required this.day,
     required this.compact,
+    required this.selected,
     this.onTap,
   });
 
   final ShootingDay day;
   final bool compact;
+  final bool selected;
   final VoidCallback? onTap;
 
   @override
@@ -1288,9 +1810,13 @@ class _CalendarEventPill extends StatelessWidget {
           onTap: onTap,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: color.withAlpha(38),
+              color: selected
+                  ? CineXPalette.primary.withAlpha(54)
+                  : color.withAlpha(38),
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: color.withAlpha(120)),
+              border: Border.all(
+                color: selected ? CineXPalette.primary : color.withAlpha(120),
+              ),
             ),
             child: Padding(
               padding: EdgeInsets.symmetric(
@@ -1365,13 +1891,6 @@ class _ShootingDayCard extends StatelessWidget {
                                   ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Sửa ngày quay',
-                        onPressed: canEditDay
-                            ? () => _showShootingDaySheet(context, day: day)
-                            : null,
-                        icon: const Icon(Icons.edit_calendar_rounded),
-                      ),
                       _Badge(label: shootingDayStatusLabel(day.status)),
                     ],
                   ),
@@ -1393,6 +1912,28 @@ class _ShootingDayCard extends StatelessWidget {
                       style: const TextStyle(color: CineXPalette.textSecondary),
                     ),
                   ],
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: canEditDay
+                            ? () => _showShootingDaySheet(context, day: day)
+                            : null,
+                        icon: const Icon(Icons.edit_calendar_rounded),
+                        label: const Text('Chỉnh sửa'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: canEditDay &&
+                                provider.unscheduledScenes.isNotEmpty
+                            ? () => _showShootingDaySheet(context, day: day)
+                            : null,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Thêm cảnh'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -1606,15 +2147,15 @@ class _ScheduleSceneSheetState extends State<_ScheduleSceneSheet> {
               )
             else
               DropdownButtonFormField<int>(
-                value: selectedDay?.id,
+                initialValue: selectedDay?.id,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Ngày quay'),
                 items: [
                   for (final day in days)
                     DropdownMenuItem(
                       value: day.id,
-                      child: Text(
+                      child: _DropdownText(
                         '${day.title} · ${day.totalMinutes}/${day.maxMinutes} phút',
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ],
@@ -2266,6 +2807,21 @@ class _MutedText extends StatelessWidget {
   }
 }
 
+class _DropdownText extends StatelessWidget {
+  const _DropdownText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
 class _InlineNotice extends StatelessWidget {
   const _InlineNotice({
     required this.icon,
@@ -2302,7 +2858,10 @@ class _InlineNotice extends StatelessWidget {
   }
 }
 
-Future<void> _showActSheet(BuildContext context) async {
+Future<void> _showActSheet(
+  BuildContext context, {
+  Act? act,
+}) async {
   final provider = context.read<WorkspaceProvider>();
   await showModalBottomSheet<bool>(
     context: context,
@@ -2310,13 +2869,15 @@ Future<void> _showActSheet(BuildContext context) async {
     useSafeArea: true,
     builder: (_) => ChangeNotifierProvider.value(
       value: provider,
-      child: const _ActSheet(),
+      child: _ActSheet(act: act),
     ),
   );
 }
 
 class _ActSheet extends StatefulWidget {
-  const _ActSheet();
+  const _ActSheet({this.act});
+
+  final Act? act;
 
   @override
   State<_ActSheet> createState() => _ActSheetState();
@@ -2332,9 +2893,16 @@ class _ActSheetState extends State<_ActSheet> {
   @override
   void initState() {
     super.initState();
+    final act = widget.act;
     _order = TextEditingController(
-      text: '${context.read<WorkspaceProvider>().acts.length + 1}',
+      text: act == null
+          ? '${context.read<WorkspaceProvider>().acts.length + 1}'
+          : '${act.sequenceOrder}',
     );
+    if (act != null) {
+      _title.text = act.title;
+      _description.text = act.description ?? '';
+    }
   }
 
   @override
@@ -2348,7 +2916,7 @@ class _ActSheetState extends State<_ActSheet> {
   @override
   Widget build(BuildContext context) {
     return _SheetFrame(
-      title: 'Tạo hồi',
+      title: widget.act == null ? 'Tạo hồi' : 'Sửa hồi',
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -2393,11 +2961,20 @@ class _ActSheetState extends State<_ActSheet> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    final ok = await context.read<WorkspaceProvider>().createAct(
-          _title.text.trim(),
-          int.parse(_order.text.trim()),
-          description: _emptyToNull(_description.text),
-        );
+    final provider = context.read<WorkspaceProvider>();
+    final act = widget.act;
+    final ok = act == null
+        ? await provider.createAct(
+            _title.text.trim(),
+            int.parse(_order.text.trim()),
+            description: _emptyToNull(_description.text),
+          )
+        : await provider.updateAct(
+            act,
+            _title.text.trim(),
+            int.parse(_order.text.trim()),
+            description: _emptyToNull(_description.text),
+          );
     if (!mounted) return;
     setState(() => _saving = false);
     _snack(
@@ -2507,13 +3084,14 @@ class _CharacterSheetState extends State<_CharacterSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _role,
+              isExpanded: true,
               validator: CharacterValidators.roleType,
               decoration: const InputDecoration(labelText: 'Vai trò'),
               items: CharacterValidators.validRoleTypes
                   .map(
                     (role) => DropdownMenuItem(
                       value: role,
-                      child: Text(characterRoleLabel(role)),
+                      child: _DropdownText(characterRoleLabel(role)),
                     ),
                   )
                   .toList(),
@@ -3049,11 +3627,13 @@ class _ResourceSheetState extends State<_ResourceSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _type,
+              isExpanded: true,
               validator: ResourceValidators.type,
               decoration: const InputDecoration(labelText: 'Loại'),
               items: ResourceValidators.validTypes
                   .map((type) => DropdownMenuItem(
-                      value: type, child: Text(resourceTypeLabel(type))))
+                      value: type,
+                      child: _DropdownText(resourceTypeLabel(type))))
                   .toList(),
               onChanged: (value) => setState(() => _type = value ?? _type),
             ),
@@ -3070,6 +3650,7 @@ class _ResourceSheetState extends State<_ResourceSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _resourceStatusValue,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Trạng thái'),
               items: const [
                 'AVAILABLE',
@@ -3081,7 +3662,7 @@ class _ResourceSheetState extends State<_ResourceSheet> {
                   .map(
                     (status) => DropdownMenuItem(
                       value: status,
-                      child: Text(resourceStatusLabel(status)),
+                      child: _DropdownText(resourceStatusLabel(status)),
                     ),
                   )
                   .toList(),
@@ -3129,7 +3710,11 @@ class _ResourceSheetState extends State<_ResourceSheet> {
   }
 }
 
-Future<void> _showSceneSheet(BuildContext context) async {
+Future<void> _showSceneSheet(
+  BuildContext context, {
+  Scene? scene,
+  int? initialActId,
+}) async {
   final provider = context.read<WorkspaceProvider>();
   await showModalBottomSheet<bool>(
     context: context,
@@ -3137,13 +3722,16 @@ Future<void> _showSceneSheet(BuildContext context) async {
     useSafeArea: true,
     builder: (_) => ChangeNotifierProvider.value(
       value: provider,
-      child: const _SceneSheet(),
+      child: _SceneSheet(scene: scene, initialActId: initialActId),
     ),
   );
 }
 
 class _SceneSheet extends StatefulWidget {
-  const _SceneSheet();
+  const _SceneSheet({this.scene, this.initialActId});
+
+  final Scene? scene;
+  final int? initialActId;
 
   @override
   State<_SceneSheet> createState() => _SceneSheetState();
@@ -3171,11 +3759,32 @@ class _SceneSheetState extends State<_SceneSheet> {
   void initState() {
     super.initState();
     final provider = context.read<WorkspaceProvider>();
-    _number = TextEditingController(text: '${provider.scenes.length + 1}');
-    _actId = provider.acts.isEmpty ? null : provider.acts.first.id;
-    _storyLocationId = provider.storyLocations.isEmpty
-        ? null
-        : provider.storyLocations.first.id;
+    final scene = widget.scene;
+    _number = TextEditingController(
+      text: scene == null ? '${provider.scenes.length + 1}' : '${scene.sceneNumber}',
+    );
+    _actId = scene?.actId ??
+        widget.initialActId ??
+        (provider.acts.isEmpty ? null : provider.acts.first.id);
+    _storyLocationId = scene?.storyLocationId ??
+        (provider.storyLocations.isEmpty ? null : provider.storyLocations.first.id);
+    _shootingLocationId = scene?.plannedShootingLocationId;
+    if (scene != null) {
+      _title.text = scene.title ?? '';
+      _summary.text = scene.summary;
+      _minutes.text = '${scene.estimatedDurationMinutes}';
+      _settingType = scene.settingType;
+      _timeOfDay = scene.timeOfDay;
+      _writingStatus = scene.writingStatus;
+      _productionStatus = scene.productionStatus;
+      _priority = scene.priority;
+      _characters.addAll(scene.characters.map((character) => character.id));
+      _resourceQuantities.addEntries(
+        scene.resources.map(
+          (resource) => MapEntry(resource.id, resource.requiredQuantity),
+        ),
+      );
+    }
   }
 
   @override
@@ -3215,7 +3824,7 @@ class _SceneSheetState extends State<_SceneSheet> {
       _shootingLocationId = null;
     }
     return _SheetFrame(
-      title: 'Tạo cảnh',
+      title: widget.scene == null ? 'Tạo cảnh' : 'Sửa cảnh',
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -3234,18 +3843,27 @@ class _SceneSheetState extends State<_SceneSheet> {
             const SizedBox(height: 12),
             TextFormField(
                 controller: _summary,
-                validator: (_) =>
-                    SceneValidators.titleOrSummary(_title.text, _summary.text),
+                validator: (_) {
+                  final titleOrSummaryError =
+                      SceneValidators.titleOrSummary(_title.text, _summary.text);
+                  if (titleOrSummaryError != null) return titleOrSummaryError;
+                  if (_writingStatus == 'DONE' &&
+                      _summary.text.trim().isEmpty) {
+                    return 'Cần nhập tóm tắt trước khi hoàn tất cảnh.';
+                  }
+                  return null;
+                },
                 maxLines: 3,
                 decoration: const InputDecoration(labelText: 'Tóm tắt')),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
               initialValue: _actId,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Hồi'),
               items: provider.acts
                   .map((act) => DropdownMenuItem<int>(
                         value: act.id,
-                        child: Text(act.title),
+                        child: _DropdownText(act.title),
                       ))
                   .toList(),
               onChanged: (value) => setState(() => _actId = value),
@@ -3253,11 +3871,12 @@ class _SceneSheetState extends State<_SceneSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
               initialValue: _storyLocationId,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Bối cảnh truyện'),
               items: provider.storyLocations
                   .map((location) => DropdownMenuItem<int>(
                         value: location.id,
-                        child: Text(location.name),
+                        child: _DropdownText(location.name),
                       ))
                   .toList(),
               onChanged: (value) => setState(() => _storyLocationId = value),
@@ -3265,14 +3884,18 @@ class _SceneSheetState extends State<_SceneSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<int?>(
               initialValue: _shootingLocationId,
+              isExpanded: true,
               decoration:
                   const InputDecoration(labelText: 'Địa điểm quay thực tế'),
               items: [
-                const DropdownMenuItem(value: null, child: Text('Chưa gán')),
+                const DropdownMenuItem(
+                  value: null,
+                  child: _DropdownText('Chưa gán'),
+                ),
                 ...provider.shootingLocations.map(
                   (location) => DropdownMenuItem<int?>(
                     value: location.id,
-                    child: Text('${location.name}, ${location.address}'),
+                    child: _DropdownText('${location.name}, ${location.address}'),
                   ),
                 ),
               ],
@@ -3284,11 +3907,13 @@ class _SceneSheetState extends State<_SceneSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _settingType,
+                    isExpanded: true,
                     validator: SceneValidators.settingType,
                     decoration: const InputDecoration(labelText: 'Bối cảnh'),
                     items: const ['INT', 'EXT']
                         .map((value) => DropdownMenuItem(
-                            value: value, child: Text(settingTypeLabel(value))))
+                            value: value,
+                            child: _DropdownText(settingTypeLabel(value))))
                         .toList(),
                     onChanged: (value) =>
                         setState(() => _settingType = value ?? _settingType),
@@ -3298,11 +3923,13 @@ class _SceneSheetState extends State<_SceneSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _timeOfDay,
+                    isExpanded: true,
                     validator: SceneValidators.timeOfDay,
                     decoration: const InputDecoration(labelText: 'Thời điểm'),
                     items: const ['DAY', 'NIGHT']
                         .map((value) => DropdownMenuItem(
-                            value: value, child: Text(timeOfDayLabel(value))))
+                            value: value,
+                            child: _DropdownText(timeOfDayLabel(value))))
                         .toList(),
                     onChanged: (value) =>
                         setState(() => _timeOfDay = value ?? _timeOfDay),
@@ -3320,38 +3947,31 @@ class _SceneSheetState extends State<_SceneSheet> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _writingStatus,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Trạng thái viết'),
               items: SceneValidators.writingStatuses
                   .map((status) => DropdownMenuItem(
-                      value: status, child: Text(sceneStatusLabel(status))))
+                      value: status,
+                      child: _DropdownText(sceneStatusLabel(status))))
                   .toList(),
-              onChanged: (value) =>
-                  setState(() => _writingStatus = value ?? _writingStatus),
+              onChanged: (value) {
+                setState(() => _writingStatus = value ?? _writingStatus);
+                _formKey.currentState?.validate();
+              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _productionStatus,
+              isExpanded: true,
               decoration:
                   const InputDecoration(labelText: 'Trạng thái sản xuất'),
               items: SceneValidators.productionStatuses
                   .map((status) => DropdownMenuItem(
                       value: status,
-                      child: Text(productionStatusLabel(status))))
+                      child: _DropdownText(productionStatusLabel(status))))
                   .toList(),
               onChanged: (value) => setState(
                   () => _productionStatus = value ?? _productionStatus),
-            ),
-            const SizedBox(height: 12),
-            Stepper(
-              physics: const NeverScrollableScrollPhysics(),
-              currentStep: _priority - 1,
-              controlsBuilder: (_, __) => const SizedBox.shrink(),
-              onStepTapped: (step) => setState(() => _priority = step + 1),
-              steps: List.generate(
-                  5,
-                  (index) => Step(
-                      title: Text('Ưu tiên ${index + 1}'),
-                      content: const SizedBox.shrink())),
             ),
             const SizedBox(height: 12),
             const _MutedText('Nhân vật'),
@@ -3416,25 +4036,46 @@ class _SceneSheetState extends State<_SceneSheet> {
     final storyLocationId = _storyLocationId;
     if (actId == null || storyLocationId == null) return;
     setState(() => _saving = true);
-    final ok = await context.read<WorkspaceProvider>().createScene(
-          sceneNumber: int.parse(_number.text.trim()),
-          actId: actId,
-          locationId: storyLocationId,
-          plannedShootingLocationId: _shootingLocationId,
-          summary: _summary.text.trim(),
-          status: _writingStatus,
-          title: _emptyToNull(_title.text),
-          settingType: _settingType,
-          timeOfDay: _timeOfDay,
-          estimatedMinutes: int.parse(_minutes.text.trim()),
-          priority: _priority,
-          productionStatus: _productionStatus,
-          characterIds: _characters.toList(),
-          resourceRequirements: _resourceQuantities.entries
-              .map((entry) =>
-                  {'resourceId': entry.key, 'requiredQuantity': entry.value})
-              .toList(),
-        );
+    final provider = context.read<WorkspaceProvider>();
+    final scene = widget.scene;
+    final resourceRequirements = _resourceQuantities.entries
+        .map((entry) =>
+            {'resourceId': entry.key, 'requiredQuantity': entry.value})
+        .toList();
+    final ok = scene == null
+        ? await provider.createScene(
+            sceneNumber: int.parse(_number.text.trim()),
+            actId: actId,
+            locationId: storyLocationId,
+            plannedShootingLocationId: _shootingLocationId,
+            summary: _summary.text.trim(),
+            status: _writingStatus,
+            title: _emptyToNull(_title.text),
+            settingType: _settingType,
+            timeOfDay: _timeOfDay,
+            estimatedMinutes: int.parse(_minutes.text.trim()),
+            priority: _priority,
+            productionStatus: _productionStatus,
+            characterIds: _characters.toList(),
+            resourceRequirements: resourceRequirements,
+          )
+        : await provider.updateScene(
+            scene.id,
+            sceneNumber: int.parse(_number.text.trim()),
+            actId: actId,
+            locationId: storyLocationId,
+            plannedShootingLocationId: _shootingLocationId,
+            summary: _summary.text.trim(),
+            status: _writingStatus,
+            title: _emptyToNull(_title.text),
+            settingType: _settingType,
+            timeOfDay: _timeOfDay,
+            estimatedMinutes: int.parse(_minutes.text.trim()),
+            priority: _priority,
+            productionStatus: _productionStatus,
+            characterIds: _characters.toList(),
+            resourceRequirements: resourceRequirements,
+          );
     if (!mounted) return;
     setState(() => _saving = false);
     _snack(
@@ -3478,6 +4119,7 @@ class _ShootingDaySheetState extends State<_ShootingDaySheet> {
   late final TextEditingController _title;
   final _max = TextEditingController();
   final _notes = TextEditingController();
+  final Set<int> _sceneIdsToAdd = {};
   DateTime? _date;
   bool _saving = false;
 
@@ -3509,6 +4151,10 @@ class _ShootingDaySheetState extends State<_ShootingDaySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<WorkspaceProvider>();
+    final additionalScenes = provider.unscheduledScenes
+        .where((scene) => _sceneIdsToAdd.contains(scene.id))
+        .toList();
     return _SheetFrame(
       title: widget.day == null ? 'Tạo ngày quay' : 'Sửa ngày quay',
       child: Form(
@@ -3557,6 +4203,23 @@ class _ShootingDaySheetState extends State<_ShootingDaySheet> {
               title: _title.text,
               maxMinutesText: _max.text,
               notes: _notes.text,
+              additionalScenes: additionalScenes,
+            ),
+            const SizedBox(height: 12),
+            _ShootingDayScenePicker(
+              existingDay: widget.day,
+              scenes: provider.unscheduledScenes,
+              selectedSceneIds: _sceneIdsToAdd,
+              enabled: !_saving,
+              onChanged: (scene, selected) {
+                setState(() {
+                  if (selected) {
+                    _sceneIdsToAdd.add(scene.id);
+                  } else {
+                    _sceneIdsToAdd.remove(scene.id);
+                  }
+                });
+              },
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
@@ -3571,22 +4234,33 @@ class _ShootingDaySheetState extends State<_ShootingDaySheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _date == null) return;
-    setState(() => _saving = true);
     final provider = context.read<WorkspaceProvider>();
     final day = widget.day;
+    final additionalMinutes = provider.unscheduledScenes
+        .where((scene) => _sceneIdsToAdd.contains(scene.id))
+        .fold<int>(0, (sum, scene) => sum + scene.estimatedDurationMinutes);
+    final maxMinutes = int.parse(_max.text.trim());
+    final projectedMinutes = (day?.totalMinutes ?? 0) + additionalMinutes;
+    if (projectedMinutes > maxMinutes) {
+      _snack(context, 'Tổng thời lượng cảnh vượt quá số phút tối đa.');
+      return;
+    }
+    setState(() => _saving = true);
     final ok = day == null
         ? await provider.createShootingDay(
             date: _date!,
             title: _title.text.trim(),
-            maxMinutes: int.parse(_max.text.trim()),
+            maxMinutes: maxMinutes,
             notes: _emptyToNull(_notes.text),
+            sceneIdsToAdd: _sceneIdsToAdd.toList(),
           )
         : await provider.updateShootingDay(
             day.id,
             date: _date!,
             title: _title.text.trim(),
-            maxMinutes: int.parse(_max.text.trim()),
+            maxMinutes: maxMinutes,
             notes: _emptyToNull(_notes.text),
+            sceneIdsToAdd: _sceneIdsToAdd.toList(),
           );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -3604,6 +4278,88 @@ class _ShootingDaySheetState extends State<_ShootingDaySheet> {
   }
 }
 
+class _ShootingDayScenePicker extends StatelessWidget {
+  const _ShootingDayScenePicker({
+    required this.existingDay,
+    required this.scenes,
+    required this.selectedSceneIds,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final ShootingDay? existingDay;
+  final List<Scene> scenes;
+  final Set<int> selectedSceneIds;
+  final bool enabled;
+  final void Function(Scene scene, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: CineXPalette.surface.withAlpha(110),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: CineXPalette.divider),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.movie_filter_rounded,
+                  color: CineXPalette.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Cảnh quay',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: CineXPalette.textPrimary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if ((existingDay?.scenes ?? const <ShootingDayScene>[]).isNotEmpty)
+              ...existingDay!.scenes.map(
+                (item) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.check_circle_rounded),
+                  title: Text(item.scene.sceneHeading),
+                  subtitle: Text(
+                    '${item.plannedStartTime ?? '--:--'} - '
+                    '${item.plannedEndTime ?? '--:--'}',
+                  ),
+                ),
+              ),
+            if (scenes.isEmpty)
+              const _MutedText('Không có cảnh sẵn sàng để thêm.')
+            else
+              ...scenes.map(
+                (scene) => CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: selectedSceneIds.contains(scene.id),
+                  onChanged: enabled
+                      ? (selected) => onChanged(scene, selected == true)
+                      : null,
+                  title: Text(scene.sceneHeading),
+                  subtitle: Text(
+                    '${scene.shootingLocationLabel} · '
+                    '${scene.estimatedDurationMinutes} phút',
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ShootingDayFormDetail extends StatelessWidget {
   const _ShootingDayFormDetail({
     required this.day,
@@ -3611,6 +4367,7 @@ class _ShootingDayFormDetail extends StatelessWidget {
     required this.title,
     required this.maxMinutesText,
     required this.notes,
+    required this.additionalScenes,
   });
 
   final ShootingDay? day;
@@ -3618,6 +4375,7 @@ class _ShootingDayFormDetail extends StatelessWidget {
   final String title;
   final String maxMinutesText;
   final String notes;
+  final List<Scene> additionalScenes;
 
   @override
   Widget build(BuildContext context) {
@@ -3625,7 +4383,11 @@ class _ShootingDayFormDetail extends StatelessWidget {
     final effectiveTitle = title.trim().isEmpty ? 'Ngày quay' : title.trim();
     final maxMinutes =
         int.tryParse(maxMinutesText.trim()) ?? day?.maxMinutes ?? 0;
-    final totalMinutes = day?.totalMinutes ?? 0;
+    final additionalMinutes = additionalScenes.fold<int>(
+      0,
+      (sum, scene) => sum + scene.estimatedDurationMinutes,
+    );
+    final totalMinutes = (day?.totalMinutes ?? 0) + additionalMinutes;
     final scenes = day?.scenes ?? const <ShootingDayScene>[];
 
     return DecoratedBox(
@@ -3692,9 +4454,9 @@ class _ShootingDayFormDetail extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 10),
-            if (scenes.isEmpty)
+            if (scenes.isEmpty && additionalScenes.isEmpty)
               const _MutedText('Chưa có cảnh trong ngày quay này.')
-            else
+            else ...[
               ...scenes.map(
                 (item) => Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -3726,6 +4488,38 @@ class _ShootingDayFormDetail extends StatelessWidget {
                   ),
                 ),
               ),
+              ...additionalScenes.map(
+                (scene) => Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.add_circle_outline_rounded,
+                        size: 18,
+                        color: CineXPalette.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          scene.sceneHeading,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '+${scene.estimatedDurationMinutes} phút',
+                        style: const TextStyle(
+                          color: CineXPalette.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

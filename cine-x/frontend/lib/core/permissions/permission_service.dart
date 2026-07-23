@@ -59,6 +59,12 @@ class PermissionService {
           permissions.addAll(screenwriterPermissions);
         case 'PRODUCER':
           permissions.addAll(producerPermissions);
+        case 'ASSISTANT_DIRECTOR':
+          permissions.addAll(producerPermissions);
+        case 'CREW':
+          permissions.add(ProjectPermission.viewSchedule);
+        case 'VIEWER':
+          break;
       }
     }
     return permissions;

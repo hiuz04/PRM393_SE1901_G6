@@ -16,6 +16,10 @@ void main() {
     test('SCREENWRITER and PRODUCER are scoped by project role', () {
       final writer = PermissionService.permissionsForRoles(['SCREENWRITER']);
       final producer = PermissionService.permissionsForRoles(['PRODUCER']);
+      final assistant =
+          PermissionService.permissionsForRoles(['ASSISTANT_DIRECTOR']);
+      final crew = PermissionService.permissionsForRoles(['CREW']);
+      final viewer = PermissionService.permissionsForRoles(['VIEWER']);
       final combined = PermissionService.permissionsForRoles([
         'SCREENWRITER',
         'PRODUCER',
@@ -25,6 +29,10 @@ void main() {
       expect(writer, isNot(contains(ProjectPermission.manageSchedule)));
       expect(producer, contains(ProjectPermission.manageResources));
       expect(producer, isNot(contains(ProjectPermission.manageStory)));
+      expect(assistant, contains(ProjectPermission.manageSchedule));
+      expect(crew, contains(ProjectPermission.viewSchedule));
+      expect(crew, isNot(contains(ProjectPermission.manageSchedule)));
+      expect(viewer, isEmpty);
       expect(combined, contains(ProjectPermission.manageStory));
       expect(combined, contains(ProjectPermission.manageSchedule));
     });

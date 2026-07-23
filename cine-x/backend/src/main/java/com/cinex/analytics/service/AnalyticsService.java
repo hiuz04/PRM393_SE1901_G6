@@ -71,8 +71,8 @@ public class AnalyticsService {
         accessService.requireVisibleProject(projectId);
         Map<SettingType, Long> values = new EnumMap<>(SettingType.class);
         Arrays.stream(SettingType.values()).forEach(type -> values.put(type, 0L));
-        locationRepository.findByProjectIdOrderByNameAsc(projectId)
-                .forEach(location -> values.put(location.getSettingType(), values.get(location.getSettingType()) + 1));
+        sceneRepository.locationSettingFrequency(projectId)
+                .forEach(row -> values.put((SettingType) row[0], (Long) row[1]));
         return new LocationSettingRatioResponse(values.get(SettingType.INT), values.get(SettingType.EXT), values);
     }
 

@@ -82,7 +82,17 @@ public class LocationService {
     }
 
     private void apply(StoryLocation location, LocationRequest request) {
-        location.setName(request.name().trim());
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isBlank()) {
+            throw new BadRequestException("Name bat buoc");
+        }
+        if (request.settingType() == null) {
+            throw new BadRequestException("Setting bat buoc");
+        }
+        if (request.timeOfDay() == null) {
+            throw new BadRequestException("Time of day bat buoc");
+        }
+        location.setName(name);
         location.setSettingType(request.settingType());
         location.setTimeOfDay(request.timeOfDay());
         location.setNotes(blankToNull(request.notes()));

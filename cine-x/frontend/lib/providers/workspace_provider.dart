@@ -118,18 +118,22 @@ class WorkspaceProvider extends ChangeNotifier {
 
   Future<void> loadCalendar({DateTime? date}) async {
     if (date != null) selectedDate = date;
-    shootingDays =
-        await repository.shootingDays(project.id, month: selectedDate);
-    selectedDateDays = await repository.shootingDays(
-      project.id,
-      date: selectedDate,
-    );
-    unscheduledScenes = await repository.scenes(
-      project.id,
-      productionStatus: 'READY_FOR_PLANNING',
-      unscheduledOnly: true,
-    );
-    conflicts = await repository.scheduleConflicts(project.id);
+    try {
+      shootingDays =
+          await repository.shootingDays(project.id, month: selectedDate);
+      selectedDateDays = await repository.shootingDays(
+        project.id,
+        date: selectedDate,
+      );
+      unscheduledScenes = await repository.scenes(
+        project.id,
+        productionStatus: 'READY_FOR_PLANNING',
+        unscheduledOnly: true,
+      );
+      conflicts = await repository.scheduleConflicts(project.id);
+    } finally {
+      notifyListeners();
+    }
   }
 
   Future<bool> createAct(String title, int order, {String? description}) {
@@ -140,6 +144,25 @@ class WorkspaceProvider extends ChangeNotifier {
         'description': description,
       }),
     );
+  }
+
+  Future<bool> updateAct(
+    Act act,
+    String title,
+    int order, {
+    String? description,
+  }) {
+    return _mutate(
+      () => repository.updateAct(project.id, act.id, {
+        'title': title,
+        'sequenceOrder': order,
+        'description': description,
+      }),
+    );
+  }
+
+  Future<bool> deleteAct(Act act) {
+    return _mutate(() => repository.deleteAct(project.id, act.id));
   }
 
   Future<bool> createCharacter(
@@ -304,6 +327,43 @@ class WorkspaceProvider extends ChangeNotifier {
     );
   }
 
+  Future<bool> updateScene(
+    int sceneId, {
+    required int sceneNumber,
+    required int actId,
+    required int locationId,
+    required String summary,
+    required String status,
+    String? title,
+    int? plannedShootingLocationId,
+    String settingType = 'INT',
+    String timeOfDay = 'DAY',
+    int? estimatedMinutes,
+    int priority = 3,
+    String productionStatus = 'NOT_READY',
+    List<int> characterIds = const [],
+    List<Map<String, Object?>> resourceRequirements = const [],
+  }) {
+    return _mutate(
+      () => repository.updateScene(project.id, sceneId, {
+        'sceneNumber': sceneNumber,
+        'actId': actId,
+        'storyLocationId': locationId,
+        'plannedShootingLocationId': plannedShootingLocationId,
+        'title': title,
+        'summary': summary,
+        'writingStatus': status,
+        'productionStatus': productionStatus,
+        'settingType': settingType,
+        'timeOfDay': timeOfDay,
+        'estimatedDurationMinutes': estimatedMinutes,
+        'priority': priority,
+        'characterIds': characterIds,
+        'resourceRequirements': resourceRequirements,
+      }),
+    );
+  }
+
   Future<bool> deleteScene(Scene scene) {
     return _mutate(() => repository.deleteScene(project.id, scene.id));
   }
@@ -313,17 +373,28 @@ class WorkspaceProvider extends ChangeNotifier {
     required String title,
     int? maxMinutes,
     String? notes,
+    List<int> sceneIdsToAdd = const [],
   }) {
     final previousDate = selectedDate;
     selectedDate = date;
     return _mutate(
-      () => repository.createShootingDay(
-        project.id,
-        date: date,
-        title: title,
-        maxMinutes: maxMinutes,
-        notes: notes,
-      ),
+      () async {
+        final day = await repository.createShootingDay(
+          project.id,
+          date: date,
+          title: title,
+          maxMinutes: maxMinutes,
+          notes: notes,
+        );
+        for (final sceneId in sceneIdsToAdd) {
+          await repository.addSceneToShootingDay(
+            project.id,
+            day.id,
+            sceneId,
+          );
+        }
+        return day;
+      },
     ).then((ok) {
       if (!ok) {
         selectedDate = previousDate;
@@ -339,18 +410,29 @@ class WorkspaceProvider extends ChangeNotifier {
     required String title,
     int? maxMinutes,
     String? notes,
+    List<int> sceneIdsToAdd = const [],
   }) {
     final previousDate = selectedDate;
     selectedDate = date;
     return _mutate(
-      () => repository.updateShootingDay(
-        project.id,
-        shootingDayId,
-        date: date,
-        title: title,
-        maxMinutes: maxMinutes,
-        notes: notes,
-      ),
+      () async {
+        final day = await repository.updateShootingDay(
+          project.id,
+          shootingDayId,
+          date: date,
+          title: title,
+          maxMinutes: maxMinutes,
+          notes: notes,
+        );
+        for (final sceneId in sceneIdsToAdd) {
+          await repository.addSceneToShootingDay(
+            project.id,
+            shootingDayId,
+            sceneId,
+          );
+        }
+        return day;
+      },
     ).then((ok) {
       if (!ok) {
         selectedDate = previousDate;

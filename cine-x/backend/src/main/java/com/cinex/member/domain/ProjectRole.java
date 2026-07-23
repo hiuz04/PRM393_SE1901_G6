@@ -4,5 +4,7 @@ public enum ProjectRole {
     OWNER,
     SCREENWRITER,
     PRODUCER,
-    ASSISTANT_DIRECTOR
+    ASSISTANT_DIRECTOR,
+    CREW,
+    VIEWER
 }

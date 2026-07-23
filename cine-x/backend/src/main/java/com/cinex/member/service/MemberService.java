@@ -44,7 +44,8 @@ public class MemberService {
         if (request.role() == ProjectRole.OWNER) {
             throw new BadRequestException("Khong them OWNER bang endpoint nay");
         }
-        UserAccount user = userRepository.findByEmailIgnoreCase(request.email())
+        String email = request.email().trim().toLowerCase();
+        UserAccount user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new NotFoundException("Khong tim thay email thanh vien"));
         if (memberRepository.existsByProjectIdAndUserId(projectId, user.getId())) {
             throw new ConflictException("Nguoi dung da la thanh vien");

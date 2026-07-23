@@ -5,6 +5,7 @@ import com.cinex.character.domain.StoryCharacter;
 import com.cinex.character.dto.CharacterDtos.CharacterRequest;
 import com.cinex.character.dto.CharacterDtos.CharacterResponse;
 import com.cinex.character.repository.StoryCharacterRepository;
+import com.cinex.common.exception.BadRequestException;
 import com.cinex.common.exception.NotFoundException;
 import com.cinex.project.domain.Project;
 import com.cinex.project.service.ProjectAccessService;
@@ -85,7 +86,14 @@ public class CharacterService {
     }
 
     private void apply(StoryCharacter character, CharacterRequest request) {
-        character.setName(request.name().trim());
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isBlank()) {
+            throw new BadRequestException("Name bat buoc");
+        }
+        if (request.roleType() == null) {
+            throw new BadRequestException("Role bat buoc");
+        }
+        character.setName(name);
         character.setRoleType(request.roleType());
         character.setDescription(blankToNull(request.description()));
     }

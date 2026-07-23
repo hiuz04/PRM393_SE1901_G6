@@ -17,6 +17,9 @@ public interface SceneRepository extends JpaRepository<Scene, Long>, JpaSpecific
 
     List<Scene> findByProjectIdOrderBySceneNumberAsc(Long projectId);
 
+    @EntityGraph(attributePaths = {"act", "location", "characters"})
+    List<Scene> findByActIdAndProjectIdOrderBySceneNumberAsc(Long actId, Long projectId);
+
     boolean existsByProjectIdAndSceneNumber(Long projectId, int sceneNumber);
 
     long countByProjectId(Long projectId);
@@ -35,6 +38,14 @@ public interface SceneRepository extends JpaRepository<Scene, Long>, JpaSpecific
             order by count(s.id) desc, c.name asc
             """)
     List<Object[]> characterFrequency(@Param("projectId") Long projectId);
+
+    @Query("""
+            select s.location.settingType, count(s.id)
+            from Scene s
+            where s.project.id = :projectId
+            group by s.location.settingType
+            """)
+    List<Object[]> locationSettingFrequency(@Param("projectId") Long projectId);
 
     @EntityGraph(attributePaths = {"act", "location", "characters"})
     List<Scene> findByLocationIdInOrderBySceneNumberAsc(Collection<Long> locationIds);

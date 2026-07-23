@@ -2,10 +2,12 @@ package com.cinex.analytics.service;
 
 import com.cinex.act.repository.ActRepository;
 import com.cinex.character.repository.StoryCharacterRepository;
+import com.cinex.location.domain.SettingType;
 import com.cinex.location.repository.StoryLocationRepository;
 import com.cinex.project.service.ProjectAccessService;
 import com.cinex.scene.domain.SceneStatus;
 import com.cinex.scene.repository.SceneRepository;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,5 +40,22 @@ class AnalyticsServiceTest {
         var summary = service.summary(1L);
 
         assertThat(summary.progressPercent()).isEqualTo(75.0);
+    }
+
+    @Test
+    void locationSettingRatioCountsScenesByLocationSetting() {
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        SceneRepository scenes = mock(SceneRepository.class);
+        when(scenes.locationSettingFrequency(1L)).thenReturn(List.of(
+                new Object[]{SettingType.INT, 3L},
+                new Object[]{SettingType.EXT, 1L}
+        ));
+        AnalyticsService service = new AnalyticsService(access, mock(ActRepository.class),
+                mock(StoryCharacterRepository.class), mock(StoryLocationRepository.class), scenes);
+
+        var ratio = service.locationSettingRatio(1L);
+
+        assertThat(ratio.intCount()).isEqualTo(3L);
+        assertThat(ratio.extCount()).isEqualTo(1L);
     }
 }
