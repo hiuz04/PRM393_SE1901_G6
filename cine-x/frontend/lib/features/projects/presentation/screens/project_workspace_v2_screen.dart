@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -855,6 +857,10 @@ class _SceneCard extends StatelessWidget {
               Text(scene.title!,
                   style: const TextStyle(color: CineXPalette.accent)),
             ],
+            if (scene.characters.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _SceneAvatars(characters: scene.characters),
+            ],
             const SizedBox(height: 8),
             Text(
               scene.summary,
@@ -886,6 +892,105 @@ class _SceneCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SceneAvatars extends StatelessWidget {
+  const _SceneAvatars({required this.characters});
+
+  final List<SceneCharacter> characters;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = characters.take(5).toList();
+    final overflow = characters.length - visible.length;
+    final width = visible.length * 24.0 + (overflow > 0 ? 36 : 8);
+    return Row(
+      children: [
+        SizedBox(
+          width: width,
+          height: 34,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (var index = 0; index < visible.length; index++)
+                Positioned(
+                  left: index * 24,
+                  child: Tooltip(
+                    message:
+                        '${visible[index].name} - ${characterRoleLabel(visible[index].roleType)}',
+                    child: _CharacterAvatar(
+                      name: visible[index].name,
+                      imageUrl: visible[index].imageUrl,
+                    ),
+                  ),
+                ),
+              if (overflow > 0)
+                Positioned(
+                  left: visible.length * 24,
+                  child: CircleAvatar(
+                    radius: 17,
+                    backgroundColor: CineXPalette.divider,
+                    child: Text(
+                      '+$overflow',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            characters.map((character) => character.name).join(', '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: CineXPalette.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CharacterAvatar extends StatelessWidget {
+  const _CharacterAvatar({
+    required this.name,
+    this.imageUrl,
+    this.radius = 17,
+  });
+
+  final String name;
+  final String? imageUrl;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = _avatarImage(imageUrl);
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: CineXPalette.primary,
+      backgroundImage: image,
+      child: image == null
+          ? Text(
+              _initials(name),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: radius <= 14 ? 10 : 11,
+                fontWeight: FontWeight.w900,
+              ),
+            )
+          : null,
     );
   }
 }
@@ -1613,6 +1718,7 @@ class _CalendarDayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visibleDays = days.take(compact ? 2 : 3).toList();
+    final dateChipSize = compact ? 20.0 : 28.0;
     final statusColor = days.isEmpty
         ? CineXPalette.divider
         : _shootingDayStatusColor(days.first.status);
@@ -1642,54 +1748,65 @@ class _CalendarDayCell extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: compact ? 24 : 28,
-                      height: compact ? 24 : 28,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? CineXPalette.primary
-                            : today
-                                ? CineXPalette.accent.withAlpha(45)
-                                : Colors.transparent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '${date.day}',
-                        style: TextStyle(
-                          color: inMonth
-                              ? CineXPalette.textPrimary
-                              : CineXPalette.textSecondary.withAlpha(120),
-                          fontSize: compact ? 12 : 13,
-                          fontWeight: FontWeight.w900,
+                SizedBox(
+                  height: dateChipSize,
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: dateChipSize,
+                          height: dateChipSize,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? CineXPalette.primary
+                                : today
+                                    ? CineXPalette.accent.withAlpha(45)
+                                    : Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '${date.day}',
+                            style: TextStyle(
+                              color: inMonth
+                                  ? CineXPalette.textPrimary
+                                  : CineXPalette.textSecondary.withAlpha(120),
+                              fontSize: compact ? 11 : 13,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    const Spacer(),
-                    if (days.isNotEmpty)
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
+                      if (days.isNotEmpty)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            width: compact ? 6 : 7,
+                            height: compact ? 6 : 7,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        )
+                      else if (canManage && !compact)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            tooltip: 'Thêm ngày quay',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 26,
+                              minHeight: 26,
+                            ),
+                            onPressed: onAdd,
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                          ),
                         ),
-                      )
-                    else if (canManage)
-                      IconButton(
-                        tooltip: 'Thêm ngày quay',
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 26,
-                          minHeight: 26,
-                        ),
-                        onPressed: onAdd,
-                        icon: const Icon(Icons.add_rounded, size: 16),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Expanded(
@@ -2558,57 +2675,293 @@ class _AnalyticsPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        _Panel(
-          child: SizedBox(
-            height: 210,
-            child: PieChart(
-              PieChartData(
-                sectionsSpace: 4,
-                sections: [
-                  PieChartSectionData(
-                    value: dashboard.todoScenes.toDouble(),
-                    title: 'Cần viết',
-                    color: CineXPalette.textSecondary,
-                  ),
-                  PieChartSectionData(
-                    value: dashboard.inProgressScenes.toDouble(),
-                    title: 'Đang viết',
-                    color: CineXPalette.warning,
-                  ),
-                  PieChartSectionData(
-                    value: dashboard.doneScenes.toDouble(),
-                    title: 'Xong',
-                    color: CineXPalette.success,
-                  ),
-                ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final charts = [
+              _CharacterFrequencyChart(items: provider.characterFrequency),
+              _SettingRatioChart(scenes: provider.scenes),
+            ];
+            if (constraints.maxWidth < 760) {
+              return Column(children: charts);
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: charts[0]),
+                const SizedBox(width: 12),
+                Expanded(child: charts[1]),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _CharacterFrequencyChart extends StatelessWidget {
+  const _CharacterFrequencyChart({required this.items});
+
+  final List<CharacterFrequency> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = items.where((item) => item.sceneCount > 0).take(8).toList();
+    final maxScenes = visible.isEmpty
+        ? 1
+        : visible.map((item) => item.sceneCount).reduce((a, b) => a > b ? a : b);
+    final interval = maxScenes <= 4 ? 1.0 : (maxScenes / 4).ceilToDouble();
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tần suất xuất hiện nhân vật',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: CineXPalette.textPrimary,
+                ),
+          ),
+          const SizedBox(height: 12),
+          if (visible.isEmpty)
+            const SizedBox(
+              height: 220,
+              child: Center(
+                child: _MutedText('Chưa có liên kết nhân vật - cảnh.'),
               ),
+            )
+          else ...[
+            SizedBox(
+              height: 220,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxScenes.toDouble(),
+                  minY: 0,
+                  gridData: FlGridData(
+                    drawVerticalLine: false,
+                    horizontalInterval: interval,
+                    getDrawingHorizontalLine: (_) => const FlLine(
+                      color: CineXPalette.divider,
+                      strokeWidth: 1,
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 32,
+                        interval: interval,
+                        getTitlesWidget: (value, meta) {
+                          if (value < 0 || value > maxScenes) {
+                            return const SizedBox.shrink();
+                          }
+                          return Text(
+                            value.toInt().toString(),
+                            style: const TextStyle(
+                              color: CineXPalette.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 34,
+                        getTitlesWidget: (value, meta) {
+                          final index = value.toInt();
+                          if (value != index ||
+                              index < 0 ||
+                              index >= visible.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return SideTitleWidget(
+                            axisSide: meta.axisSide,
+                            space: 8,
+                            child: Text(
+                              _initials(visible[index].name),
+                              style: const TextStyle(
+                                color: CineXPalette.textSecondary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  barGroups: [
+                    for (var index = 0; index < visible.length; index++)
+                      BarChartGroupData(
+                        x: index,
+                        barRods: [
+                          BarChartRodData(
+                            toY: visible[index].sceneCount.toDouble(),
+                            width: 22,
+                            color: CineXPalette.secondary,
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            ...visible.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    _CharacterAvatar(name: item.name, radius: 13),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: CineXPalette.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    _Badge(label: '${item.sceneCount} cảnh'),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingRatioChart extends StatelessWidget {
+  const _SettingRatioChart({required this.scenes});
+
+  final List<Scene> scenes;
+
+  @override
+  Widget build(BuildContext context) {
+    final interior = scenes.where((scene) => scene.settingType == 'INT').length;
+    final exterior = scenes.where((scene) => scene.settingType == 'EXT').length;
+    final total = interior + exterior;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tỷ lệ Nội cảnh / Ngoại cảnh',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: CineXPalette.textPrimary,
+                ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 220,
+            child: total == 0
+                ? const Center(
+                    child: _MutedText('Chưa có cảnh để thống kê.'),
+                  )
+                : PieChart(
+                    PieChartData(
+                      sectionsSpace: 4,
+                      centerSpaceRadius: 42,
+                      sections: [
+                        if (interior > 0)
+                          PieChartSectionData(
+                            value: interior.toDouble(),
+                            title: _percentLabel(interior, total),
+                            radius: 72,
+                            color: CineXPalette.primary,
+                            titleStyle: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        if (exterior > 0)
+                          PieChartSectionData(
+                            value: exterior.toDouble(),
+                            title: _percentLabel(exterior, total),
+                            radius: 72,
+                            color: CineXPalette.accent,
+                            titleStyle: const TextStyle(
+                              color: CineXPalette.background,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 10),
+          _ChartLegendItem(
+            color: CineXPalette.primary,
+            label: 'Nội cảnh (INT)',
+            value: '$interior cảnh',
+          ),
+          const SizedBox(height: 8),
+          _ChartLegendItem(
+            color: CineXPalette.accent,
+            label: 'Ngoại cảnh (EXT)',
+            value: '$exterior cảnh',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChartLegendItem extends StatelessWidget {
+  const _ChartLegendItem({
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  final Color color;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: CineXPalette.textPrimary,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        _Panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Tần suất nhân vật',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: CineXPalette.textPrimary,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              if (provider.characterFrequency.isEmpty)
-                const _MutedText('Chưa có liên kết nhân vật - cảnh.')
-              else
-                ...provider.characterFrequency.map(
-                  (item) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(item.name),
-                    trailing: _Badge(label: '${item.sceneCount} cảnh'),
-                  ),
-                ),
-            ],
+        Text(
+          value,
+          style: const TextStyle(
+            color: CineXPalette.textSecondary,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ],
@@ -4690,6 +5043,28 @@ Color _shootingDayStatusColor(String status) {
     'CANCELLED' => CineXPalette.danger,
     _ => CineXPalette.primary,
   };
+}
+
+ImageProvider<Object>? _avatarImage(String? value) {
+  final source = value?.trim();
+  if (source == null || source.isEmpty) return null;
+  if (source.startsWith('http://') || source.startsWith('https://')) {
+    return NetworkImage(source);
+  }
+  return FileImage(File(source));
+}
+
+String _initials(String name) {
+  final parts = name.trim().split(RegExp(r'\s+'));
+  if (parts.isEmpty || parts.first.isEmpty) return '?';
+  final first = parts.first.characters.first;
+  final second = parts.length > 1 ? parts.last.characters.first : '';
+  return '$first$second'.toUpperCase();
+}
+
+String _percentLabel(int value, int total) {
+  if (total == 0) return '0%';
+  return '${(value * 100 / total).round()}%';
 }
 
 String? _emptyToNull(String value) {

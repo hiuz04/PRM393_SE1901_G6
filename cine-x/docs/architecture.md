@@ -13,11 +13,16 @@ Controller -> Service -> Repository -> PostgreSQL
 Package structure:
 
 ```text
-com.cinex.<feature>.controller
-com.cinex.<feature>.service
-com.cinex.<feature>.repository
-com.cinex.<feature>.domain
-com.cinex.<feature>.dto
+com.cinex.controller
+com.cinex.service
+com.cinex.repository
+com.cinex.domain
+com.cinex.dto
+com.cinex.exception
+com.cinex.response
+com.cinex.config
+com.cinex.filter
+com.cinex.util
 ```
 
 Rules:

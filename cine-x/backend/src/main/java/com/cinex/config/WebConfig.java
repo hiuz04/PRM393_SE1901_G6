@@ -1,6 +1,6 @@
 package com.cinex.config;
 
-import com.cinex.storage.service.StorageService;
+import com.cinex.service.StorageService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
