@@ -1,0 +1,26 @@
+# Java / Spring
+backend/target/
+backend/uploads/
+*.class
+
+# Flutter
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/build/
+frontend/.packages
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Secrets and local runtime
+.env
+*.env
+!*.env.example
+docker/postgres-data/
+
+# OS
+.DS_Store
+Thumbs.db

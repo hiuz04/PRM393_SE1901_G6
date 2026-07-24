@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cinex-postgres
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-cinexdb}"
+      POSTGRES_USER: "${POSTGRES_USER:-cinex}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-cinex_local_2026}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: cinex-backend
+    profiles: ["backend"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: "${POSTGRES_DB:-cinexdb}"
+      DB_USERNAME: "${POSTGRES_USER:-cinex}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD:-cinex_local_2026}"
+      JWT_SECRET: "${JWT_SECRET:-CineXLocalDevelopmentSecretKeyMustBeAtLeast32Chars}"
+      JWT_EXPIRATION: 86400000
+      UPLOAD_DIR: uploads
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5000,http://localhost:8081,http://localhost:8082,http://localhost:5173,http://localhost:*"
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend-uploads:/app/uploads
+
+volumes:
+  postgres-data:
+  backend-uploads:

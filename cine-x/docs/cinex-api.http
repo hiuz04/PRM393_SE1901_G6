@@ -1,0 +1,121 @@
+@baseUrl = http://localhost:8080/api/v1
+@token = replace-with-login-token
+@projectId = 1
+@actId = 1
+@characterId = 1
+@locationId = 1
+@sceneId = 1
+
+### Register
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "displayName": "Demo User",
+  "email": "demo@cinex.local",
+  "password": "CineX@123",
+  "confirmPassword": "CineX@123"
+}
+
+### Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "owner@cinex.local",
+  "password": "CineX@123"
+}
+
+### Create project
+POST {{baseUrl}}/projects
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Film Moi",
+  "genre": "Drama",
+  "description": "Project mau",
+  "status": "ACTIVE"
+}
+
+### Create act
+POST {{baseUrl}}/projects/{{projectId}}/acts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Act 1",
+  "description": "Mo dau",
+  "sequenceOrder": 1
+}
+
+### Create character
+POST {{baseUrl}}/projects/{{projectId}}/characters
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Linh",
+  "roleType": "MAIN",
+  "description": "Nhan vat chinh"
+}
+
+### Upload character image
+POST {{baseUrl}}/projects/{{projectId}}/characters/{{characterId}}/image
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----CinexBoundary
+
+------CinexBoundary
+Content-Disposition: form-data; name="file"; filename="character.png"
+Content-Type: image/png
+
+< ./sample-character.png
+------CinexBoundary--
+
+### Create location
+POST {{baseUrl}}/projects/{{projectId}}/locations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Studio A",
+  "settingType": "INT",
+  "timeOfDay": "DAY",
+  "notes": "Phong quay chinh"
+}
+
+### Create scene
+POST {{baseUrl}}/projects/{{projectId}}/scenes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "actId": {{actId}},
+  "locationId": {{locationId}},
+  "sceneNumber": 1,
+  "title": "Mo dau",
+  "summary": "Nhan vat buoc vao studio.",
+  "status": "TODO",
+  "estimatedMinutes": 5,
+  "characterIds": [{{characterId}}]
+}
+
+### Filter scenes
+GET {{baseUrl}}/projects/{{projectId}}/scenes?characterId={{characterId}}&settingType=INT&status=TODO
+Authorization: Bearer {{token}}
+
+### Dashboard
+GET {{baseUrl}}/projects/{{projectId}}/dashboard
+Authorization: Bearer {{token}}
+
+### Planner
+GET {{baseUrl}}/projects/{{projectId}}/planner/by-location
+Authorization: Bearer {{token}}
+
+### Analytics
+GET {{baseUrl}}/projects/{{projectId}}/analytics/summary
+Authorization: Bearer {{token}}
+
+### Export PDF
+GET {{baseUrl}}/projects/{{projectId}}/export/pdf
+Authorization: Bearer {{token}}

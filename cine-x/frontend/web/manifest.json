@@ -1,0 +1,8 @@
+{
+  "name": "CINE-X",
+  "short_name": "CINE-X",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#101418",
+  "theme_color": "#006C67"
+}
